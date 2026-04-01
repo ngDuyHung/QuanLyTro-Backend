@@ -86,14 +86,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
     Route::get('auth/me', [AuthController::class, 'me'])->name('auth.me');
 
-    Route::apiResource('users', UserController::class);
+    Route::apiResource('properties', PropertyController::class);
 });
 ```
 
 **Quy tắc:**
 - Tất cả route trong `routes/api/v1.php`.
 - Dùng `Route::apiResource()` cho CRUD chuẩn.
-- Tên route: `v1.users.index`, `v1.users.store`, v.v.
+- Tên route: `v1.properties.index`, `v1.properties.store`, v.v.
+- Tên bảng, cột, route dùng tiếng Anh. Chỉ comment/label/message bằng tiếng Việt.
 - Không đặt logic xử lý trong route file.
 
 ---
@@ -109,69 +110,69 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Exceptions\Domain\BusinessException;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\KhuNha\StoreKhuNhaRequest;
-use App\Http\Requests\KhuNha\UpdateKhuNhaRequest;
-use App\Http\Resources\KhuNha\KhuNhaResource;
-use App\Models\KhuNha;
+use App\Http\Requests\Property\StorePropertyRequest;
+use App\Http\Requests\Property\UpdatePropertyRequest;
+use App\Http\Resources\Property\PropertyResource;
+use App\Models\Property;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-class KhuNhaController extends Controller
+class PropertyController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $khuNhas = KhuNha::where('user_id', $request->user()->id)
-            ->withCount('phong')
+        $properties = Property::where('user_id', $request->user()->id)
+            ->withCount('rooms')
             ->when($request->search, fn ($q) =>
-                $q->where('ten_khu', 'like', "%{$request->search}%")
-                  ->orWhere('dia_chi', 'like', "%{$request->search}%")
+                $q->where('name', 'like', "%{$request->search}%")
+                  ->orWhere('address', 'like', "%{$request->search}%")
             )
             ->latest()
             ->paginate($request->integer('per_page', 15));
 
-        return KhuNhaResource::collection($khuNhas)->response();
+        return PropertyResource::collection($properties)->response();
     }
 
-    public function show(Request $request, int $id): KhuNhaResource
+    public function show(Request $request, int $id): PropertyResource
     {
-        $khuNha = KhuNha::where('user_id', $request->user()->id)
-            ->withCount('phong')
+        $property = Property::where('user_id', $request->user()->id)
+            ->withCount('rooms')
             ->findOrFail($id);
 
-        return new KhuNhaResource($khuNha);
+        return new PropertyResource($property);
     }
 
-    public function store(StoreKhuNhaRequest $request): JsonResponse
+    public function store(StorePropertyRequest $request): JsonResponse
     {
-        $khuNha = KhuNha::create([
+        $property = Property::create([
             ...$request->validated(),
             'user_id' => $request->user()->id,
         ]);
 
-        $khuNha->loadCount('phong');
+        $property->loadCount('rooms');
 
-        return (new KhuNhaResource($khuNha))->response()->setStatusCode(201);
+        return (new PropertyResource($property))->response()->setStatusCode(201);
     }
 
-    public function update(UpdateKhuNhaRequest $request, int $id): KhuNhaResource
+    public function update(UpdatePropertyRequest $request, int $id): PropertyResource
     {
-        $khuNha = KhuNha::where('user_id', $request->user()->id)->findOrFail($id);
+        $property = Property::where('user_id', $request->user()->id)->findOrFail($id);
 
-        $khuNha->update($request->validated());
-        $khuNha->loadCount('phong');
+        $property->update($request->validated());
+        $property->loadCount('rooms');
 
-        return new KhuNhaResource($khuNha);
+        return new PropertyResource($property);
     }
 
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $khuNha = KhuNha::where('user_id', $request->user()->id)->findOrFail($id);
+        $property = Property::where('user_id', $request->user()->id)->findOrFail($id);
 
-        if ($khuNha->phong()->exists()) {
+        if ($property->rooms()->exists()) {
             throw new BusinessException('Không thể xóa khu nhà vì vẫn còn phòng bên trong.');
         }
 
-        $khuNha->delete();
+        $property->delete();
 
         return response()->json(['message' => 'Xóa khu nhà thành công.']);
     }
@@ -317,16 +318,14 @@ Repository Pattern thêm 2–3 file mỗi module (Interface + Implementation + S
 
 ```php
 // ✅ Eager load — tránh N+1
-$phongs = Phong::with('khuNha')->where('khu_nha_id', $id)->paginate(15);
+$rooms = Room::with('property')->where('property_id', $id)->paginate(15);
 
 // ✅ withCount — đếm liên quan không cần thêm query
-$khuNhas = KhuNha::withCount('phong')->where('user_id', $userId)->latest()->paginate(15);
+$properties = Property::withCount('rooms')->where('user_id', $userId)->latest()->paginate(15);
 
 // ✅ Ownership check — dùng where() trước findOrFail()
-$khuNha = KhuNha::where('user_id', $request->user()->id)->findOrFail($id);
+$property = Property::where('user_id', $request->user()->id)->findOrFail($id);
 ```
-
-> **Ngoại lệ**: `UserRepository` trong Auth module được giữ nguyên vì đã hoàn thiện. Các module mới tạo KHÔNG dùng Repository.
 
 ---
 
@@ -364,9 +363,9 @@ class User extends Authenticatable
         'password'          => 'hashed',
     ];
 
-    public function khuNha(): HasMany
+    public function properties(): HasMany
     {
-        return $this->hasMany(KhuNha::class);
+        return $this->hasMany(Property::class);
     }
 }
 ```
@@ -407,7 +406,7 @@ class UserResource extends JsonResource
             'created_at' => $this->created_at?->toISOString(),
 
             // Relationship — chỉ hiện khi đã được load
-            'khu_nha' => KhuNhaResource::collection($this->whenLoaded('khuNha')),
+            'properties' => PropertyResource::collection($this->whenLoaded('properties')),
         ];
     }
 }
@@ -508,11 +507,13 @@ public function login(array $credentials): array
 
 ## 13. MIGRATION & DATABASE
 
+**Quy tắc đặt tên:** Tên bảng, cột, enum values dùng **tiếng Anh**. Comment, label, message dùng **tiếng Việt**.
+
 ```php
-Schema::create('ten_bang', function (Blueprint $table) {
+Schema::create('properties', function (Blueprint $table) {
     $table->id();
     $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
-    $table->string('ten');                           // tên ngắn gọn
+    $table->string('name');                          // tên bằng tiếng Anh
     $table->boolean('is_active')->default(true)->index();
     $table->softDeletes();                           // nếu cần xóa mềm
     $table->timestamps();
@@ -539,16 +540,16 @@ namespace App\Enums;
 
 enum UserRole: string
 {
-    case Admin     = 'admin';
-    case ChuTro    = 'chu_tro';
-    case NguoiThue = 'nguoi_thue';
+    case Admin    = 'admin';
+    case Landlord = 'landlord';
+    case Tenant   = 'tenant';
 
     public function label(): string
     {
         return match($this) {
-            self::Admin     => 'Quản trị viên',
-            self::ChuTro    => 'Chủ trọ',
-            self::NguoiThue => 'Người thuê',
+            self::Admin    => 'Quản trị viên',
+            self::Landlord => 'Chủ trọ',
+            self::Tenant   => 'Người thuê',
         };
     }
 }
@@ -571,13 +572,13 @@ enum UserRole: string
 
 ```php
 // ✅ Early Return
-public function process(BanGhiThue $ban): void
+public function process(Lease $lease): void
 {
-    if (!$ban->isDangThue()) {
-        throw new BusinessException('Chỉ xử lý bản ghi đang thuê.');
+    if (!$lease->status->isActive()) {
+        throw new BusinessException('Chỉ xử lý hợp đồng đang thuê.');
     }
 
-    $this->doSomething($ban);
+    $this->doSomething($lease);
 }
 ```
 

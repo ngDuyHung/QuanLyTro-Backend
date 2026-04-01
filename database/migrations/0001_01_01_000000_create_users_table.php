@@ -28,10 +28,10 @@ return new class extends Migration
             $table->string('email')->unique()->comment('Email unique');
             $table->string('phone', 15)->nullable()->index()
                 ->comment('Số điện thoại, dùng để tìm kiếm');
-            $table->enum('role', ['admin', 'chu_tro', 'nguoi_thue'])
-                ->default('nguoi_thue')
+            $table->enum('role', ['admin', 'landlord', 'tenant'])
+                ->default('tenant')
                 ->index()
-                ->comment('Vai trò trong hệ thống (admin/chu_tro/nguoi_thue)');
+                ->comment('Vai trò trong hệ thống (admin/landlord/tenant)');
             $table->boolean('is_active')
                 ->default(true)
                 ->index()

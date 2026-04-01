@@ -6,16 +6,16 @@ namespace App\Enums;
 
 enum UserRole: string
 {
-    case Admin     = 'admin';
-    case ChuTro    = 'chu_tro';
-    case NguoiThue = 'nguoi_thue';
+    case Admin    = 'admin';
+    case Landlord = 'landlord';
+    case Tenant   = 'tenant';
 
     public function label(): string
     {
         return match($this) {
-            self::Admin     => 'Quản trị viên',
-            self::ChuTro    => 'Chủ trọ',
-            self::NguoiThue => 'Người thuê',
+            self::Admin    => 'Quản trị viên',
+            self::Landlord => 'Chủ trọ',
+            self::Tenant   => 'Người thuê',
         };
     }
 
@@ -24,23 +24,18 @@ enum UserRole: string
         return $this === self::Admin;
     }
 
-    public function isChuTro(): bool
+    public function isLandlord(): bool
     {
-        return $this === self::ChuTro;
+        return $this === self::Landlord;
     }
 
-    public function isNguoiThue(): bool
+    public function isTenant(): bool
     {
-        return $this === self::NguoiThue;
+        return $this === self::Tenant;
     }
 
     public function canManageSystem(): bool
     {
         return $this === self::Admin;
-    }
-
-    public function canManageProperties(): bool
-    {
-        return in_array($this, [self::Admin, self::ChuTro], true);
     }
 }

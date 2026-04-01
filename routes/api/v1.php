@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Api\V1\AuthController;
-use App\Http\Controllers\Api\V1\KhuNhaController;
+use App\Http\Controllers\Api\V1\PropertyController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -27,5 +27,5 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
     Route::get('auth/me', [AuthController::class, 'me'])->name('auth.me');
 
-    Route::apiResource('khu-nha', KhuNhaController::class);
+    Route::apiResource('properties', PropertyController::class);
 });

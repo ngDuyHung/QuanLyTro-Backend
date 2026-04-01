@@ -51,7 +51,7 @@ class AuthService
     public function register(array $data): array
     {
         $data['password']  = Hash::make($data['password']);
-        $data['role']      = UserRole::ChuTro->value;
+        $data['role']      = UserRole::Landlord->value;
         $data['is_active'] = true;
 
         $user  = User::create($data);

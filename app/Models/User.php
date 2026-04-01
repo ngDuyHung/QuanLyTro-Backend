@@ -43,27 +43,27 @@ class User extends Authenticatable
     // ===== Relationships =====
 
     /**
-     * Một chủ trọ (chu_tro) sở hữu nhiều khu nhà.
+     * Một chủ trọ (landlord) sở hữu nhiều khu nhà.
      */
-    public function khuNha(): HasMany
+    public function properties(): HasMany
     {
-        return $this->hasMany(KhuNha::class);
+        return $this->hasMany(Property::class);
     }
 
     /**
      * Tài khoản hệ thống liên kết với hồ sơ khách thuê (nếu có).
      */
-    public function khachThue(): HasOne
+    public function tenant(): HasOne
     {
-        return $this->hasOne(KhachThue::class);
+        return $this->hasOne(Tenant::class);
     }
 
     /**
      * Chủ trọ có nhiều tài khoản ngân hàng để nhận tiền.
      */
-    public function taiKhoanNganHang(): HasMany
+    public function bankAccounts(): HasMany
     {
-        return $this->hasMany(TaiKhoanNganHang::class);
+        return $this->hasMany(BankAccount::class);
     }
 
     // ===== Scopes =====
