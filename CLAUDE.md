@@ -20,19 +20,26 @@ Testing    : PHPUnit + Pest
 
 ## 2. KIẾN TRÚC TỔNG QUAN
 
-Áp dụng mô hình **MVC + Service Layer + Repository Pattern**.
+Áp dụng mô hình **Lean MVC** — chuẩn Laravel gốc, đủ dùng cho đồ án, dễ giải thích cho hội đồng.
 
 ```
-Route → Middleware → FormRequest → Controller → Service → Repository → Model
+Route → Middleware → FormRequest → Controller → Model (Eloquent)
+Response ← ApiResource ← Controller
+```
+
+Với module có nghiệp vụ phức tạp (Auth, Hóa đơn, Thanh toán...) mới bổ sung Service:
+
+```
+Route → Middleware → FormRequest → Controller → Service → Model (Eloquent)
 Response ← ApiResource ← Controller ← Service
 ```
 
 ### Nguyên tắc cốt lõi
 
-- **Controller**: Chỉ điều phối — nhận request, gọi service, trả response.
-- **Service**: Toàn bộ business logic nằm ở đây.
-- **Repository**: Toàn bộ database query nằm ở đây.
-- **Model**: Chỉ định nghĩa cấu trúc, relationship, cast — không chứa logic.
+- **Controller**: Gọi Eloquent trực tiếp cho CRUD đơn giản. Chỉ tạo Service khi controller vượt ~150 dòng hoặc cần dùng lại logic ở nhiều chỗ.
+- **Service**: CHỈ dùng cho nghiệp vụ thực sự phức tạp: Auth, tính hóa đơn, xử lý thanh toán, trả phòng tổng hợp...
+- **Model**: Định nghĩa `$fillable`, `$casts`, relationship — không chứa logic xử lý.
+- **Repository Pattern**: **KHÔNG ÁP DỤNG** — Eloquent ORM đã đủ mạnh. Bọc thêm Repository chỉ mất thời gian mà không mang lại giá trị thực cho đồ án.
 
 ---
 
@@ -49,14 +56,9 @@ app/
 │   ├── Requests/{Model}/          # StoreRequest, UpdateRequest
 │   └── Resources/{Model}/         # ApiResource
 ├── Models/
-├── Repositories/
-│   ├── Contracts/                 # Interfaces
-│   ├── Eloquent/                  # Implementations
-│   └── BaseRepository.php
-├── Services/
+├── Services/                      # Chỉ tạo khi logic phức tạp
 └── Providers/
-    ├── AppServiceProvider.php
-    └── RepositoryServiceProvider.php
+    └── AppServiceProvider.php
 
 routes/
 ├── api.php
@@ -105,56 +107,84 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Exceptions\Domain\BusinessException;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\User\StoreUserRequest;
-use App\Http\Requests\User\UpdateUserRequest;
-use App\Http\Resources\User\UserResource;
-use App\Services\UserService;
+use App\Http\Requests\KhuNha\StoreKhuNhaRequest;
+use App\Http\Requests\KhuNha\UpdateKhuNhaRequest;
+use App\Http\Resources\KhuNha\KhuNhaResource;
+use App\Models\KhuNha;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-class UserController extends Controller
+class KhuNhaController extends Controller
 {
-    public function __construct(
-        private readonly UserService $userService
-    ) {}
-
     public function index(Request $request): JsonResponse
     {
-        $users = $this->userService->paginate($request->only(['search', 'per_page']));
-        return UserResource::collection($users)->response();
+        $khuNhas = KhuNha::where('user_id', $request->user()->id)
+            ->withCount('phong')
+            ->when($request->search, fn ($q) =>
+                $q->where('ten_khu', 'like', "%{$request->search}%")
+                  ->orWhere('dia_chi', 'like', "%{$request->search}%")
+            )
+            ->latest()
+            ->paginate($request->integer('per_page', 15));
+
+        return KhuNhaResource::collection($khuNhas)->response();
     }
 
-    public function show(int $id): UserResource
+    public function show(Request $request, int $id): KhuNhaResource
     {
-        return new UserResource($this->userService->findOrFail($id));
+        $khuNha = KhuNha::where('user_id', $request->user()->id)
+            ->withCount('phong')
+            ->findOrFail($id);
+
+        return new KhuNhaResource($khuNha);
     }
 
-    public function store(StoreUserRequest $request): JsonResponse
+    public function store(StoreKhuNhaRequest $request): JsonResponse
     {
-        $user = $this->userService->create($request->validated());
-        return (new UserResource($user))->response()->setStatusCode(201);
+        $khuNha = KhuNha::create([
+            ...$request->validated(),
+            'user_id' => $request->user()->id,
+        ]);
+
+        $khuNha->loadCount('phong');
+
+        return (new KhuNhaResource($khuNha))->response()->setStatusCode(201);
     }
 
-    public function update(UpdateUserRequest $request, int $id): UserResource
+    public function update(UpdateKhuNhaRequest $request, int $id): KhuNhaResource
     {
-        return new UserResource($this->userService->update($id, $request->validated()));
+        $khuNha = KhuNha::where('user_id', $request->user()->id)->findOrFail($id);
+
+        $khuNha->update($request->validated());
+        $khuNha->loadCount('phong');
+
+        return new KhuNhaResource($khuNha);
     }
 
-    public function destroy(int $id): JsonResponse
+    public function destroy(Request $request, int $id): JsonResponse
     {
-        $this->userService->delete($id);
-        return response()->json(['message' => 'Xóa thành công.']);
+        $khuNha = KhuNha::where('user_id', $request->user()->id)->findOrFail($id);
+
+        if ($khuNha->phong()->exists()) {
+            throw new BusinessException('Không thể xóa khu nhà vì vẫn còn phòng bên trong.');
+        }
+
+        $khuNha->delete();
+
+        return response()->json(['message' => 'Xóa khu nhà thành công.']);
     }
 }
 ```
 
 **Quy tắc:**
 - Đặt trong `app/Http/Controllers/Api/V1/`.
-- Không chứa business logic, không gọi Model trực tiếp.
-- Inject Service qua constructor.
+- CRUD đơn giản: gọi Eloquent trực tiếp, không cần Service.
+- Phức tạp: inject Service qua constructor, controller chỉ điều phối.
 - Luôn dùng `FormRequest` cho request có input.
 - Luôn trả `ApiResource`, không trả `array` hay Model thô.
+- Ownership check: dùng `where('user_id', $request->user()->id)` trước `findOrFail()` — non-owner nhận 404.
 
 ---
 
@@ -222,6 +252,8 @@ class StoreUserRequest extends FormRequest
 
 ## 7. SERVICE LAYER
 
+> **Khi nào tạo Service?** Chỉ khi logic quá phức tạp để để trong Controller: nhiều bước, đụng nhiều model, hoặc cần tái sử dụng ở nơi khác. CRUD đơn giản 1 model → để trong Controller, KHÔNG cần Service.
+
 ```php
 <?php
 
@@ -229,133 +261,72 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Exceptions\Domain\NotFoundException;
+use App\Exceptions\Domain\BusinessException;
 use App\Models\User;
-use App\Repositories\Contracts\UserRepositoryInterface;
-use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 
-class UserService
+// ✅ AuthService xứng đáng có Service: logic phức tạp (token, active check...)
+class AuthService
 {
-    public function __construct(
-        private readonly UserRepositoryInterface $userRepository
-    ) {}
-
-    public function paginate(array $filters = []): LengthAwarePaginator
+    public function login(array $credentials): array
     {
-        return $this->userRepository->paginate($filters);
-    }
-
-    public function findOrFail(int $id): User
-    {
-        $user = $this->userRepository->findById($id);
-
-        if (!$user) {
-            throw new NotFoundException("Người dùng #{$id} không tồn tại.");
+        if (!Auth::attempt($credentials)) {
+            throw new BusinessException('Email hoặc mật khẩu không đúng.', 401);
         }
 
-        return $user;
+        $user = Auth::user();
+
+        if (!$user->is_active) {
+            Auth::logout();
+            throw new BusinessException('Tài khoản đã bị vô hiệu hóa.', 403);
+        }
+
+        $user->tokens()->where('name', 'api_token')->delete();
+        $token = $user->createToken('api_token', expiresAt: now()->addDays(30));
+
+        return [
+            'user'         => $user,
+            'access_token' => $token->plainTextToken,
+            'token_type'   => 'Bearer',
+            'expires_at'   => $token->accessToken->expires_at?->toISOString(),
+        ];
     }
 
-    public function create(array $data): User
+    public function register(array $data): User
     {
-        return DB::transaction(function () use ($data) {
-            $data['password'] = Hash::make($data['password']);
-            return $this->userRepository->create($data);
-        });
-    }
-
-    public function update(int $id, array $data): User
-    {
-        $user = $this->findOrFail($id);
-
-        return DB::transaction(function () use ($user, $data) {
-            if (isset($data['password'])) {
-                $data['password'] = Hash::make($data['password']);
-            }
-            return $this->userRepository->update($user, $data);
-        });
-    }
-
-    public function delete(int $id): void
-    {
-        $user = $this->findOrFail($id);
-        $this->userRepository->delete($user);
+        $data['password'] = Hash::make($data['password']);
+        return User::create($data);
     }
 }
 ```
 
 **Quy tắc:**
-- Chứa toàn bộ business logic.
-- Inject Repository qua constructor — không gọi Model trực tiếp.
+- Chỉ tạo Service khi **thực sự cần**: Auth, tính hóa đơn điện nước, xử lý thanh toán, trả phòng tổng hợp...
+- Gọi Eloquent/Model trực tiếp — KHÔNG qua Repository.
 - Throw exception có nghĩa, không trả `null` khi thất bại.
 - Dùng `DB::transaction()` khi có nhiều thao tác ghi liên quan.
 
 ---
 
-## 8. REPOSITORY LAYER
+## 8. GHI CHÚ: KHÔNG DÙNG REPOSITORY PATTERN
+
+Repository Pattern thêm 2–3 file mỗi module (Interface + Implementation + ServiceProvider binding), tạo boilerplate không cần thiết khi Eloquent ORM đã xử lý hoàn toàn tốt.
+
+**Thay vào đó, xử lý trực tiếp trong Controller:**
 
 ```php
-// Contracts/UserRepositoryInterface.php
-interface UserRepositoryInterface
-{
-    public function paginate(array $filters): LengthAwarePaginator;
-    public function findById(int $id): ?User;
-    public function findByEmail(string $email): ?User;
-    public function create(array $data): User;
-    public function update(User $user, array $data): User;
-    public function delete(User $user): void;
-}
+// ✅ Eager load — tránh N+1
+$phongs = Phong::with('khuNha')->where('khu_nha_id', $id)->paginate(15);
 
-// Eloquent/UserRepository.php
-class UserRepository extends BaseRepository implements UserRepositoryInterface
-{
-    protected const RELATIONS = [];  // khai báo eager loading mặc định
-    protected int $perPage = 15;
+// ✅ withCount — đếm liên quan không cần thêm query
+$khuNhas = KhuNha::withCount('phong')->where('user_id', $userId)->latest()->paginate(15);
 
-    public function paginate(array $filters = []): LengthAwarePaginator
-    {
-        return $this->model
-            ->with(self::RELATIONS)
-            ->when(isset($filters['search']), fn ($q) =>
-                $q->where('name', 'like', "%{$filters['search']}%")
-                  ->orWhere('email', 'like', "%{$filters['search']}%")
-            )
-            ->latest()
-            ->paginate($filters['per_page'] ?? $this->perPage);
-    }
-
-    public function findById(int $id): ?User
-    {
-        return $this->model->with(self::RELATIONS)->find($id);
-    }
-
-    // ... create, update, delete
-}
-
-// BaseRepository.php
-abstract class BaseRepository
-{
-    public function __construct(protected Model $model) {}
-
-    public function all(): Collection { return $this->model->all(); }
-    public function findOrFail(int $id): Model { return $this->model->findOrFail($id); }
-}
-
-// RepositoryServiceProvider.php
-public function register(): void
-{
-    $this->app->bind(UserRepositoryInterface::class, UserRepository::class);
-    // Thêm bind mới vào đây khi tạo Repository mới
-}
+// ✅ Ownership check — dùng where() trước findOrFail()
+$khuNha = KhuNha::where('user_id', $request->user()->id)->findOrFail($id);
 ```
 
-**Quy tắc:**
-- Mỗi Repository có một Interface trong `Contracts/`, implementation trong `Eloquent/`.
-- Bind trong `RepositoryServiceProvider`, đăng ký trong `bootstrap/providers.php`.
-- Chỉ chứa database query — không có business logic.
-- Tránh N+1 — dùng `with()` và khai báo constant `RELATIONS`.
+> **Ngoại lệ**: `UserRepository` trong Auth module được giữ nguyên vì đã hoàn thiện. Các module mới tạo KHÔNG dùng Repository.
 
 ---
 
@@ -631,13 +602,13 @@ Bước    Layer               File cần tạo
 1.      Migration       →   database/migrations/
 2.      Enum (nếu có)   →   app/Enums/
 3.      Model           →   app/Models/
-4.      Repository      →   app/Repositories/Contracts/...Interface.php
-                            app/Repositories/Eloquent/...Repository.php
-                            (Bind trong RepositoryServiceProvider)
-5.      Service         →   app/Services/...Service.php
-6.      FormRequest     →   app/Http/Requests/{Model}/Store...Request.php
+4.      FormRequest     →   app/Http/Requests/{Model}/Store...Request.php
                             app/Http/Requests/{Model}/Update...Request.php
-7.      Resource        →   app/Http/Resources/{Model}/...Resource.php
-8.      Controller      →   app/Http/Controllers/Api/V1/...Controller.php
-9.      Route           →   routes/api/v1.php
+5.      Resource        →   app/Http/Resources/{Model}/...Resource.php
+6.      Controller      →   app/Http/Controllers/Api/V1/...Controller.php
+                            (Eloquent trực tiếp — KHÔNG cần Service cho CRUD)
+7.      Route           →   routes/api/v1.php
+
+Service (tùy chọn — chỉ khi nghiệp vụ phức tạp):
+        Service         →   app/Services/...Service.php
 ```

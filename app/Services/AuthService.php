@@ -7,16 +7,12 @@ namespace App\Services;
 use App\Enums\UserRole;
 use App\Exceptions\Domain\BusinessException;
 use App\Models\User;
-use App\Repositories\Contracts\UserRepositoryInterface;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthService
 {
-    public function __construct(
-        private readonly UserRepositoryInterface $userRepository
-    ) {}
 
     /**
      * @return array{user: User, access_token: string, token_type: string, expires_at: string|null}
@@ -54,13 +50,11 @@ class AuthService
      */
     public function register(array $data): array
     {
-        $user = DB::transaction(function () use ($data): User {
-            $data['role']      = UserRole::ChuTro->value;
-            $data['is_active'] = true;
+        $data['password']  = Hash::make($data['password']);
+        $data['role']      = UserRole::ChuTro->value;
+        $data['is_active'] = true;
 
-            return $this->userRepository->create($data);
-        });
-
+        $user  = User::create($data);
         $token = $user->createToken('api_token', expiresAt: now()->addDays(30));
 
         return [
