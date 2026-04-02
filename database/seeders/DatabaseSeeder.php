@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Role;
 
 class DatabaseSeeder extends Seeder
 {
@@ -15,11 +16,20 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        // Tạo các role mặc định cho hệ thống
+        Role::firstOrCreate(['name' => 'admin',    'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'landlord', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'tenant',   'guard_name' => 'web']);
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        // Tạo tài khoản admin mặc định
+        $admin = User::firstOrCreate(
+            ['email' => 'admin@quanlytro.com'],
+            [
+                'name'      => 'Admin',
+                'password'  => bcrypt('password'),
+                'is_active' => true,
+            ]
+        );
+        $admin->syncRoles(['admin']);
     }
 }

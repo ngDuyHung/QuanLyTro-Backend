@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Enums\UserRole;
 use App\Exceptions\Domain\BusinessException;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
@@ -51,10 +50,10 @@ class AuthService
     public function register(array $data): array
     {
         $data['password']  = Hash::make($data['password']);
-        $data['role']      = UserRole::Landlord->value;
         $data['is_active'] = true;
 
         $user  = User::create($data);
+        $user->assignRole('landlord');
         $token = $user->createToken('api_token', expiresAt: now()->addDays(30));
 
         return [

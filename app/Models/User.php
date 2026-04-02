@@ -4,26 +4,24 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use App\Enums\UserRole;
 use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
     protected $fillable = [
         'name',
         'email',
         'phone',
-        'role',
         'is_active',
         'password',
     ];
@@ -36,7 +34,6 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'is_active'         => 'boolean',
-        'role'              => UserRole::class,
         'password'          => 'hashed',
     ];
 
@@ -68,13 +65,8 @@ class User extends Authenticatable
 
     // ===== Scopes =====
 
-    public function scopeActive(Builder $query): void
+    public function scopeActive(\Illuminate\Database\Eloquent\Builder $query): void
     {
         $query->where('is_active', true);
-    }
-
-    public function scopeByRole(Builder $query, UserRole $role): void
-    {
-        $query->where('role', $role->value);
     }
 }
