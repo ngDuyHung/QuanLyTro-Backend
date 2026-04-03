@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\PropertyType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,12 +18,14 @@ class Property extends Model
 
     protected $fillable = [
         'user_id',
+        'property_type',
         'name',
         'address',
         'description',
     ];
 
     protected $casts = [
+        'property_type' => PropertyType::class,
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

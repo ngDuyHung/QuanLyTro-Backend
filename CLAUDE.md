@@ -28,7 +28,7 @@ Response ← ApiResource ← Controller
 ```
 
 Với module có nghiệp vụ phức tạp (Auth, Hóa đơn, Thanh toán...) mới bổ sung Service:
-
+- và các func nên chủ thích tiếng việt để biết function đó thực hiện chức năng gì
 ```
 Route → Middleware → FormRequest → Controller → Service → Model (Eloquent)
 Response ← ApiResource ← Controller ← Service

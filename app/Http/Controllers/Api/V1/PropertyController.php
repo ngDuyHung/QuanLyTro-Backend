@@ -19,9 +19,11 @@ class PropertyController extends Controller
     {
         $properties = Property::where('user_id', $request->user()->id)
             ->withCount('rooms')
-            ->when($request->search, fn ($q) =>
+            ->when(
+                $request->search,
+                fn($q) =>
                 $q->where('name', 'like', "%{$request->search}%")
-                  ->orWhere('address', 'like', "%{$request->search}%")
+                    ->orWhere('address', 'like', "%{$request->search}%")
             )
             ->latest()
             ->paginate($request->integer('per_page', 15));
@@ -39,12 +41,13 @@ class PropertyController extends Controller
     }
 
     public function store(StorePropertyRequest $request): JsonResponse
-    {
+    {   // ... tự động khớp các cặp key-value từ mảng $request->validated() vào trường tương ứng của model Property
+        //validated có ed là giá trị được xác thực và làm sạch từ file StorePropertyRequest
         $property = Property::create([
             ...$request->validated(),
             'user_id' => $request->user()->id,
         ]);
-
+        // Sau khi tạo xong, chúng ta load lại số lượng phòng để trả về trong response
         $property->loadCount('rooms');
 
         return (new PropertyResource($property))->response()->setStatusCode(201);

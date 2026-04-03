@@ -99,7 +99,7 @@
 - Chủ trọ quản lý khách thuê liên quan đến khu nhà của mình.
 - Không xóa khách thuê đang có hợp đồng `status = active`.
 - Upload ảnh CCCD trước/sau (URL string).
-
+-- Khách thuê bắt buộc phải thuộc một hợp đồng nào đó.
 ---
 
 ## MODULE 5: HỢP ĐỒNG THUÊ (Leases)
@@ -140,7 +140,7 @@
 - Quan hệ: `spouse`, `child`, `parent`, `sibling`, `friend`, `other`.
 - Kiểm tra `max_occupants` của phòng (nếu > 0) khi thêm thành viên.
 - Có thể set `left_at` khi thành viên rời phòng (không cần xóa).
-
+-- thành viên tạo bắt buộc phải thuộc về một (phòng nào đó đã có hợp đồng)
 ---
 
 ## MODULE 7: DỊCH VỤ & GIÁ (Service Prices)

@@ -20,6 +20,8 @@ return new class extends Migration
             $table->id()->comment('ID khu nhà');
             $table->unsignedBigInteger('user_id')
                 ->comment('FK users - chủ trọ sở hữu khu nhà');
+
+            $table->string('property_type', 50)->comment('Loại khu nhà');
             $table->string('name', 100)->comment('Tên khu nhà trọ');
             $table->string('address', 255)->comment('Địa chỉ chi tiết');
             $table->text('description')->nullable()
