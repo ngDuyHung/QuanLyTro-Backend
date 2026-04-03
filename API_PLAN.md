@@ -12,7 +12,7 @@
 | 1 | Auth (Xác thực) | 4 | ✅ Đã hoàn thành |
 | 2 | Khu Nhà (Properties) | 5 | ✅ Đã hoàn thành |
 | 3 | Phòng | 6 | ⬜ Chưa làm |
-| 4 | Khách Thuê | 5 | ⬜ Chưa làm |
+| 4 | Khách Thuê | 4 | ⬜ Chưa làm |
 | 5 | Bản Ghi Thuê (Hợp đồng) | 6 | ⬜ Chưa làm |
 | 6 | Thành Viên Thuê | 4 | ⬜ Chưa làm |
 | 7 | Dịch Vụ & Giá | 5 | ⬜ Chưa làm |
@@ -85,21 +85,21 @@
 
 > Quản lý hồ sơ khách thuê.
 > Bảng: `tenants`. CCCD unique, có thể liên kết `user_id`.
+> **Lưu ý:** Khách thuê được tạo tự động khi tạo hợp đồng (Module 5). Module này chỉ để xem, cập nhật và xóa.
 
 | Method | Endpoint | Mô tả | Auth |
 |--------|----------|-------|------|
 | GET | `/tenants` | Danh sách khách thuê (search theo tên/SĐT/CCCD, phân trang) | Có |
 | GET | `/tenants/{id}` | Chi tiết khách thuê (kèm danh sách hợp đồng) | Có |
-| POST | `/tenants` | Tạo hồ sơ khách thuê mới | Có |
 | PUT | `/tenants/{id}` | Cập nhật thông tin khách thuê | Có |
 | DELETE | `/tenants/{id}` | Xóa khách thuê (chỉ khi không có hợp đồng đang thuê) | Có |
 
 **Nghiệp vụ:**
+- Khách thuê được tạo tự động khi tạo hợp đồng thuê (`POST /leases`), không tạo riêng lẻ.
 - CCCD không được trùng (unique).
-- Chủ trọ quản lý khách thuê liên quan đến khu nhà của mình.
+- Chủ trọ chỉ thấy khách thuê liên quan đến khu nhà của mình.
 - Không xóa khách thuê đang có hợp đồng `status = active`.
-- Upload ảnh CCCD trước/sau (URL string).
--- Khách thuê bắt buộc phải thuộc một hợp đồng nào đó.
+- Upload ảnh CCCD trước/sau lưu vào `storage/tenants/{id}/`.
 ---
 
 ## MODULE 5: HỢP ĐỒNG THUÊ (Leases)
@@ -117,10 +117,13 @@
 | DELETE | `/leases/{id}` | Xóa hợp đồng (chỉ vừa tạo, chưa có hóa đơn) | Có |
 
 **Nghiệp vụ:**
-- **Tạo hợp đồng**: Phòng phải ở `status = available` → tự động chuyển phòng sang `occupied`.
+- **Tạo hợp đồng** (`POST /leases`): Nhận thông tin người thuê + thông tin hợp đồng trong 1 request.
+  - Tạo `tenant` mới từ dữ liệu gửi lên (kèm upload ảnh CCCD nếu có).
+  - Kiểm tra phòng ở `status = available` → tự động chuyển sang `occupied`.
+  - Ghi chỉ số điện/nước đầu vào (`meter_readings`) với `previous_reading = 0`.
 - **Trả phòng**: Cập nhật `status = ended`, `end_date = today` → chuyển phòng về `available`.
 - Kiểm tra phòng chỉ có **1 hợp đồng `status = active`** tại một thời điểm.
-- Ghi chỉ số điện nước đầu vào khi tạo hợp đồng (bản ghi đầu tiên `meter_readings`).
+- Request body tạo hợp đồng gồm: `room_id`, `start_date`, `billing_day`, `deposit`, `electricity_reading`, `water_reading` + nested object `tenant` (full_name, phone, id_card_number, email, id_card_front_image, id_card_back_image).
 
 ---
 

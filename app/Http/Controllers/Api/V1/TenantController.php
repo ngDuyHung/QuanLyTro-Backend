@@ -8,7 +8,6 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Exceptions\Domain\BusinessException;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Tenant\StoreTenantRequest;
 use App\Http\Requests\Tenant\UpdateTenantRequest;
 use App\Http\Resources\Tenant\TenantResource;
 use App\Models\Tenant;
@@ -47,47 +46,13 @@ class TenantController extends Controller
     public function show(Request $request, int $id): JsonResponse
     {
         $tenant = Tenant::with([
-                'leases.room:id,full_name,property_id',
-                'leases.room.property:id,full_name',
+                'leases.room:id,name,property_id',
+                'leases.room.property:id,name',
             ])
             ->whereHas('leases.room.property', fn ($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
         return (new TenantResource($tenant))->response();
-    }
-
-    /**
-     * Tạo hồ sơ khách thuê mới.
-     * Bất kỳ chủ trọ đã đăng nhập đều có thể tạo.
-     * Ảnh CCCD lưu vào storage/app/public/tenants/{id}/
-     */
-    public function store(StoreTenantRequest $request): JsonResponse
-    {
-        $data = $request->validated();
-
-        // Lọc ra file ảnh để xử lý riêng sau khi có ID
-        unset($data['id_card_front_image'], $data['id_card_back_image']);
-
-        // Tạo tenant trước để lấy ID làm tên thư mục
-        $tenant = Tenant::create($data);
-
-        // Upload ảnh mặt trước CCCD vào thư mục tenants/{id}/
-        if ($request->hasFile('id_card_front_image')) {
-            $ext = $request->file('id_card_front_image')->extension();
-            $tenant->id_card_front_image = $request->file('id_card_front_image')
-                ->storeAs("tenants/{$tenant->id}", "id_card_front.{$ext}", 'public');
-        }
-
-        // Upload ảnh mặt sau CCCD vào thư mục tenants/{id}/
-        if ($request->hasFile('id_card_back_image')) {
-            $ext = $request->file('id_card_back_image')->extension();
-            $tenant->id_card_back_image = $request->file('id_card_back_image')
-                ->storeAs("tenants/{$tenant->id}", "id_card_back.{$ext}", 'public');
-        }
-
-        $tenant->save();
-
-        return (new TenantResource($tenant))->response()->setStatusCode(201);
     }
 
     /**
