@@ -7,8 +7,10 @@ use App\Http\Controllers\Api\V1\LeaseController;
 use App\Http\Controllers\Api\V1\LeaseMemberController;
 use App\Http\Controllers\Api\V1\PropertyController;
 use App\Http\Controllers\Api\V1\RoomController;
+use App\Http\Controllers\Api\V1\ServicePriceController;
 use App\Http\Controllers\Api\V1\TenantController;
 use Illuminate\Support\Facades\Route;
+use Symfony\Component\Routing\Router;
 
 /*
 |--------------------------------------------------------------------------
@@ -61,4 +63,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('leases/{leaseId}/members',   [LeaseMemberController::class, 'store'])->name('leases.members.store');
     Route::put('lease-members/{id}',          [LeaseMemberController::class, 'update'])->name('lease-members.update');
     Route::delete('lease-members/{id}',       [LeaseMemberController::class, 'destroy'])->name('lease-members.destroy');
+
+    // ── Service Prices (Giá dịch vụ) ───────────────────────────────────────
+    Route::get('properties/{propertyId}/service-prices', [ServicePriceController::class, 'index'])->name('service-prices.index'); // Lấy danh sách giá dịch vụ của khu nhà
+    Route::post('service-prices', [ServicePriceController::class, 'store'])->name('service-prices.store');
+    Route::get('service-prices/{id}', [ServicePriceController::class, '    show'])->name('service-prices.show');
+    Route::put('service-prices/{id}', [ServicePriceController::class, 'update'])->name('service-prices.update');
+    Route::delete('service-prices/{id}', [ServicePriceController::class, 'destroy'])->name('service-prices.destroy');  
 });
