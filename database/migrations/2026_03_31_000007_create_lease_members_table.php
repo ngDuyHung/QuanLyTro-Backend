@@ -9,44 +9,54 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Bảng lease_members (thành viên thuê / co-tenants / roommates)
-     *
-     * Lưu thông tin những người khác cùng ở trong 1 phòng
-     * (không phải người ký hợp đồng chính).
+     * Bảng lease_members (Bảng trung gian)
+     * * Làm nhiệm vụ nối Hợp đồng (leases) với Người ở ghép (tenants).
+     * Mọi thông tin cá nhân đều lấy từ bảng tenants.
      */
     public function up(): void
     {
         Schema::create('lease_members', function (Blueprint $table) {
-            $table->id()->comment('ID thành viên');
+            $table->id()->comment('ID bản ghi');
+
+            // Khóa ngoại trỏ về Hợp đồng
             $table->unsignedBigInteger('lease_id')
-                ->comment('FK leases - thành viên của hợp đồng nào');
-            $table->string('full_name', 100)->comment('Họ và tên thành viên');
-            $table->year('birth_year')->nullable()
-                ->comment('Năm sinh (để phân biệt trẻ em/người lớn cho tính phí)');
+                ->comment('FK leases - Thuộc hợp đồng nào');
+
+            // Khóa ngoại trỏ về Kho dữ liệu con người
+            $table->unsignedBigInteger('tenant_id')
+                ->comment('FK tenants - Trỏ về thông tin cư dân');
+
             $table->enum('relationship', ['spouse', 'child', 'parent', 'sibling', 'friend', 'other'])
                 ->default('other')
-                ->comment('Quan hệ với người ký hợp đồng');
-            $table->string('id_card_number', 20)->nullable()
-                ->comment('Số CCCD/CMND nếu có');
-            $table->string('phone', 15)->nullable()
-                ->comment('Số điện thoại liên lạc');
+                ->comment('Quan hệ với người đứng tên hợp đồng');
+
             $table->string('note', 255)->nullable()
                 ->comment('Ghi chú thêm');
+
             $table->date('move_in_date')->nullable()
                 ->comment('Ngày thành viên chuyển vào');
+
             $table->date('move_out_date')->nullable()
                 ->comment('Ngày rời phòng, NULL = đang ở');
+
             $table->timestamp('created_at')->useCurrent()
                 ->comment('Thời điểm tạo bản ghi');
             $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate()
                 ->comment('Thời điểm cập nhật cuối cùng');
 
+            // Thiết lập ràng buộc (Foreign Keys)
             $table->foreign('lease_id')
                 ->references('id')
                 ->on('leases')
-                ->onDelete('cascade');
+                ->onDelete('cascade'); // Xóa hợp đồng thì xóa luôn danh sách thành viên
 
-            $table->index('lease_id');
+            $table->foreign('tenant_id')
+                ->references('id')
+                ->on('tenants')
+                ->onDelete('restrict'); // Không cho phép xóa khách thuê nếu họ đang nằm trong danh sách này
+
+            // Đánh index để truy vấn nhanh
+            $table->index(['lease_id', 'tenant_id']);
         });
     }
 

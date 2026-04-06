@@ -10,6 +10,7 @@ use App\Http\Requests\Lease\StoreLeaseRequest;
 use App\Http\Requests\Lease\UpdateLeaseRequest;
 use App\Http\Resources\Lease\LeaseResource;
 use App\Models\Lease;
+use App\Models\Tenant;
 use App\Services\LeaseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -48,7 +49,7 @@ class LeaseController extends Controller
                 'room.property:id,name,address',
                 'tenant',
                 'members',
-                'invoices:id,lease_id,invoice_code,status,total_amount,billing_month',
+                'invoices:id,lease_id,invoice_code,status,total_amount',
             ])
             ->whereHas('room.property', fn ($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
@@ -130,5 +131,50 @@ class LeaseController extends Controller
         $lease->delete();
 
         return response()->json(['message' => 'Xóa hợp đồng thành công.']);
+    }
+
+    /**
+     * Đổi người đứng tên hợp đồng (đại diện).
+     * Logic: chỉ cần cập nhật leases.tenant_id sang người mới.
+     *   - Người mới phải là thành viên hiện tại trong lease_members.
+     *   - Sau khi đổi, tự động xóa người mới khỏi lease_members (vì họ là đại diện rồi).
+     * Ownership check: qua phòng -> khu nhà.
+     */
+    public function changeRepresentative(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'tenant_id' => ['required', 'integer', 'exists:tenants,id'],
+        ], [
+            'tenant_id.required' => 'Vui lòng chọn người đứng tên mới.',
+            'tenant_id.exists'   => 'Khách thuê không tồn tại trong hệ thống.',
+        ]);
+
+        $lease = Lease::with('members')
+            ->whereHas('room.property', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->findOrFail($id);
+
+        // Chỉ đổi khi hợp đồng đang active
+        if (!$lease->status->isActive()) {
+            throw new BusinessException('Chỉ có thể đổi người đứng tên cho hợp đồng đang có hiệu lực.');
+        }
+
+        $newTenantId = $request->integer('tenant_id');
+
+        // Không đổi nếu đã là người đứng tên hiện tại
+        if ($newTenantId === $lease->tenant_id) {
+            throw new BusinessException('Khách thuê này đã là người đứng tên hợp đồng hiện tại.');
+        }
+
+        // Người mới phải đang là thành viên trong lease_members
+        $memberRecord = $lease->members()->where('tenant_id', $newTenantId)->first();
+        if (!$memberRecord) {
+            throw new BusinessException('Người được chọn phải là thành viên hiện tại trong hợp đồng mới có thể trở thành người đứng tên.');
+        }
+
+        // Cập nhật tenant_id trên hợp đồng & xóa thành viên đó khỏi lease_members
+        $lease->update(['tenant_id' => $newTenantId]);
+        $memberRecord->delete();
+
+        return (new LeaseResource($lease->load(['room.property', 'tenant'])))->response();
     }
 }

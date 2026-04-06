@@ -51,8 +51,8 @@ class LeaseResource extends JsonResource
             'members' => $this->whenLoaded('members', fn () =>
                 $this->members->map(fn ($member) => [
                     'id'           => $member->id,
-                    'full_name'    => $member->full_name,
-                    'phone'        => $member->phone,
+                    'full_name'    => $member->tenant->full_name,
+                    'phone'        => $member->tenant->phone,
                     'relationship' => $member->relationship?->value,
                     'relationship_label' => $member->relationship?->label(),
                     'joined_at'    => $member->joined_at?->toDateString(),

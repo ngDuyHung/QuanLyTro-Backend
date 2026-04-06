@@ -26,6 +26,8 @@ return new class extends Migration
                 ->comment('Đầu kỳ thanh toán');
             $table->date('period_to')
                 ->comment('Cuối kỳ thanh toán');
+            $table->decimal('total_amount', 15, 2)
+                ->comment('Tổng số tiền phải trả');
             $table->enum('status', ['unpaid', 'paid', 'partially_paid'])
                 ->default('unpaid')
                 ->index()

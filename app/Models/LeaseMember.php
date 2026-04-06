@@ -17,11 +17,8 @@ class LeaseMember extends Model
 
     protected $fillable = [
         'lease_id',
-        'full_name',
-        'id_card_number',
-        'birth_year',
+        'tenant_id',
         'relationship',
-        'phone',
         'move_in_date',
         'move_out_date',
         'note',
@@ -29,7 +26,6 @@ class LeaseMember extends Model
 
     protected $casts = [
         'relationship'  => MemberRelationship::class,
-        'birth_year'    => 'integer',
         'move_in_date'  => 'date',
         'move_out_date' => 'date',
     ];
@@ -37,10 +33,18 @@ class LeaseMember extends Model
     // ===== Relationships =====
 
     /**
-     * Thành viên thuộc hợp đồng thuê nào.
+     * Bản ghi này thuộc về hợp đồng nào.
      */
     public function lease(): BelongsTo
     {
         return $this->belongsTo(Lease::class);
+    }
+
+    /**
+     * Bản ghi này đang đại diện cho Cư dân nào.
+     */
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class);
     }
 }

@@ -21,12 +21,14 @@ class Invoice extends Model
         'invoice_code',
         'period_from',
         'period_to',
+        'total_amount',
         'status',
     ];
 
     protected $casts = [
         'period_from' => 'date',
         'period_to'   => 'date',
+        'total_amount' => 'decimal:2',
         'status'      => InvoiceStatus::class,
     ];
 

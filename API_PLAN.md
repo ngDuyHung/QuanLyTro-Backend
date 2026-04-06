@@ -11,10 +11,10 @@
 |---|--------|-------------|------------|
 | 1 | Auth (Xác thực) | 4 | ✅ Đã hoàn thành |
 | 2 | Khu Nhà (Properties) | 5 | ✅ Đã hoàn thành |
-| 3 | Phòng | 6 | ⬜ Chưa làm |
-| 4 | Khách Thuê | 4 | ⬜ Chưa làm |
-| 5 | Bản Ghi Thuê (Hợp đồng) | 6 | ⬜ Chưa làm |
-| 6 | Thành Viên Thuê | 4 | ⬜ Chưa làm |
+| 3 | Phòng | 6 | ✅ Đã hoàn thành |
+| 4 | Khách Thuê | 4 | ✅ Đã hoàn thành |
+| 5 | Bản Ghi Thuê (Hợp đồng) | 6 | ✅ Đã hoàn thành |
+| 6 | Thành Viên Thuê | 5 | ✅ Đã hoàn thành |
 | 7 | Dịch Vụ & Giá | 5 | ⬜ Chưa làm |
 | 8 | Chỉ Số Điện Nước | 4 | ⬜ Chưa làm |
 | 9 | Hóa Đơn | 6 | ⬜ Chưa làm |
@@ -127,23 +127,36 @@
 
 ---
 
-## MODULE 6: THÀNH VIÊN THUÊ (Lease Members)
+## MODULE 6: THÀNH VIÊN THUÊ (Lease Members) ✅
 
 > Quản lý người ở cùng (co-tenants) trong hợp đồng.
-> Bảng: `lease_members` → FK `lease_id`.
+> Bảng: `lease_members` → FK `lease_id`, `tenant_id`.
+>
+> **Logic thiết kế:**
+> - `leases.tenant_id` = người **đại diện** (đứng tên hợp đồng).
+> - `lease_members.tenant_id` = người **ở cùng** (không phải đại diện).
+> - Cả hai đều là bản ghi trong bảng `tenants` — dữ liệu thống nhất, không trùng lặp.
 
 | Method | Endpoint | Mô tả | Auth |
 |--------|----------|-------|------|
-| GET | `/leases/{leaseId}/members` | Danh sách thành viên của hợp đồng | Có |
-| POST | `/leases/{leaseId}/members` | Thêm thành viên mới | Có |
-| PUT | `/lease-members/{id}` | Cập nhật thông tin thành viên | Có |
-| DELETE | `/lease-members/{id}` | Xóa thành viên khỏi hợp đồng | Có |
+| GET | `/leases/{leaseId}/members` | Danh sách thành viên ở cùng trong hợp đồng | Có |
+| POST | `/leases/{leaseId}/members` | Thêm thành viên (liên kết tenant có sẵn hoặc tạo mới inline) | Có |
+| PUT | `/lease-members/{id}` | Cập nhật quan hệ, ghi chú, ngày chuyển vào/ra | Có |
+| DELETE | `/lease-members/{id}` | Xóa thành viên khỏi hợp đồng (KHÔNG xóa tenant) | Có |
+| PATCH | `/leases/{id}/representative` | Đổi người đứng tên hợp đồng | Có |
 
 **Nghiệp vụ:**
 - Quan hệ: `spouse`, `child`, `parent`, `sibling`, `friend`, `other`.
-- Kiểm tra `max_occupants` của phòng (nếu > 0) khi thêm thành viên.
-- Có thể set `left_at` khi thành viên rời phòng (không cần xóa).
--- thành viên tạo bắt buộc phải thuộc về một (phòng nào đó đã có hợp đồng)
+- Kiểm tra `max_occupants` của phòng khi thêm thành viên (nếu > 0).
+- Thành viên phải thuộc hợp đồng đang `active`.
+- `POST /leases/{leaseId}/members` hỗ trợ 2 cách:
+  - Truyền `tenant_id` → liên kết khách thuê đã có trong hệ thống.
+  - Truyền object `tenant` (full_name, phone, id_card_number...) → tạo bản ghi `tenants` mới rồi liên kết.
+- **Đổi người đứng tên** (`PATCH /leases/{id}/representative`):
+  - Người mới **bắt buộc phải là thành viên hiện tại** trong `lease_members`.
+  - Chỉ cần cập nhật `leases.tenant_id` = ID người mới.
+  - Bản ghi của người mới trong `lease_members` được xóa tự động (vì họ đã là đại diện).
+  - Dữ liệu cũ không bị mất — người cũ vẫn còn trong bảng `tenants`.
 ---
 
 ## MODULE 7: DỊCH VỤ & GIÁ (Service Prices)
@@ -289,9 +302,9 @@ Phase 1 — Nền tảng (đã xong + cần làm tiếp):
   ⬜ Module 3: Phòng (Rooms)
 
 Phase 2 — Quản lý thuê:
-  ⬜ Module 4: Khách Thuê
-  ⬜ Module 5: Bản Ghi Thuê (Hợp đồng)
-  ⬜ Module 6: Thành Viên Thuê
+  ✅ Module 4: Khách Thuê
+  ✅ Module 5: Bản Ghi Thuê (Hợp đồng)
+  ✅ Module 6: Thành Viên Thuê
 
 Phase 3 — Dịch vụ & Chi phí:
   ⬜ Module 7: Dịch Vụ & Giá
