@@ -8,6 +8,7 @@ use App\Enums\FreeUnitType;
 use App\Enums\ServiceType;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
 
 class StoreServicePriceRequest extends FormRequest
@@ -29,7 +30,12 @@ class StoreServicePriceRequest extends FormRequest
     {
         return [
             'property_id'     => ['nullable', 'exists:properties,id'],
-            'service_type'   => ['required', new Enum(ServiceType::class)],
+            'service_type'   => [
+                'required',
+                new Enum(ServiceType::class),
+                Rule::unique('service_prices', 'service_type')
+                    ->where('property_id', $this->input('property_id')),
+            ],
             'unit_price'     => ['required', 'integer', 'min:0'],
             'free_units'     => ['nullable', 'integer', 'min:0'],
             'free_unit_type' => ['nullable', new Enum(FreeUnitType::class)],
@@ -46,6 +52,7 @@ class StoreServicePriceRequest extends FormRequest
             'property_id.exists'   => 'Khu nhà không tồn tại.',
             'service_type.required' => 'Vui lòng chọn loại dịch vụ.',
             'service_type.in'      => 'Loại dịch vụ không hợp lệ.',
+            'service_type.unique'  => 'Loại dịch vụ này đã có mức giá cho khu nhà được chọn.',
             'unit_price.required'  => 'Vui lòng nhập đơn giá.',
             'unit_price.integer'   => 'Đơn giá phải là số nguyên.',
             'unit_price.min'       => 'Đơn giá phải lớn hơn hoặc bằng 0.',

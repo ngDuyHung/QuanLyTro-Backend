@@ -3,8 +3,11 @@
 declare(strict_types=1);
 namespace App\Http\Requests\ServicePrice;
 
+use App\Enums\FreeUnitType;
+use App\Enums\ServiceType;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rules\Enum;
 
 class UpdateServicePriceRequest extends FormRequest
 {
@@ -23,33 +26,40 @@ class UpdateServicePriceRequest extends FormRequest
      */
     public function rules(): array
     {
-        $servicePriceId = (int) $this->route('service_price');
         return [
-            'name' => ['sometimes', 'required', 'string', 'max:100'],
-            'price' => ['sometimes', 'required', 'numeric', 'min:0'],
-            'unit' => ['sometimes', 'required', 'string', 'max:50'],
+            'service_type'  => ['required', new Enum(ServiceType::class)],
+            'unit_price'    => ['required', 'integer', 'min:0'],
+            'free_units'    => ['nullable', 'integer', 'min:0'],
+            'free_unit_type' => ['nullable', new Enum(FreeUnitType::class)],
+            'effective_date' => ['required', 'date'],
+            'expiry_date'    => ['nullable', 'date', 'after_or_equal:effective_date'],
+            'note'           => ['nullable', 'string', 'max:255'],
         ];
     }
 
     public function messages(): array
     {
         return [
-            'name.required' => 'Tên dịch vụ không được để trống.',
-            'name.max' => 'Tên dịch vụ không được vượt quá 100 ký tự.',
-            'price.required' => 'Giá dịch vụ không được để trống.',
-            'price.numeric' => 'Giá dịch vụ phải là một số.',
-            'price.min' => 'Giá dịch vụ phải lớn hơn hoặc bằng 0.',
-            'unit.required' => 'Đơn vị tính không được để trống.',
-            'unit.max' => 'Đơn vị tính không được vượt quá 50 ký tự.',
+            'service_type.required' => 'Loại dịch vụ không được để trống.',
+            'service_type.enum' => 'Loại dịch vụ không hợp lệ.',
+            'unit_price.min' => 'Giá dịch vụ phải lớn hơn hoặc bằng 0.',
+            'free_units.min' => 'Số lượng miễn phí phải lớn hơn hoặc bằng 0.',
+            'effective_date.required' => 'Ngày hiệu lực không được để trống.',
+            'expiry_date.after_or_equal' => 'Ngày hết hạn phải sau hoặc bằng ngày hiệu lực.',
+            'note.max' => 'Ghi chú không được vượt quá 255 ký tự.',
         ];
     }
 
     public function attributes(): array
     {
         return [
-            'name' => 'tên dịch vụ',
-            'price' => 'giá dịch vụ',
-            'unit' => 'đơn vị tính',
+            'service_type' => 'loại dịch vụ',
+            'unit_price' => 'giá dịch vụ',
+            'free_units' => 'số lượng miễn phí',
+            'free_unit_type' => 'loại đơn vị miễn phí',
+            'effective_date' => 'ngày hiệu lực',
+            'expiry_date' => 'ngày hết hạn',
+            'note' => 'ghi chú',
         ];
     }
 }

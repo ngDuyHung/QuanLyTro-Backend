@@ -55,7 +55,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('leases',                        [LeaseController::class, 'store'])->name('leases.store');
     Route::put('leases/{lease}',                 [LeaseController::class, 'update'])->name('leases.update');
     Route::patch('leases/{lease}/end',           [LeaseController::class, 'end'])->name('leases.end');
-    Route::patch('leases/{lease}/representative',[LeaseController::class, 'changeRepresentative'])->name('leases.representative');
+    Route::patch('leases/{lease}/representative', [LeaseController::class, 'changeRepresentative'])->name('leases.representative');
     Route::delete('leases/{lease}',              [LeaseController::class, 'destroy'])->name('leases.destroy');
 
     // ── Lease Members (Thành viên hợp đồng) ──────────────────────────────
@@ -65,9 +65,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::delete('lease-members/{id}',       [LeaseMemberController::class, 'destroy'])->name('lease-members.destroy');
 
     // ── Service Prices (Giá dịch vụ) ───────────────────────────────────────
-    Route::get('properties/{propertyId}/service-prices', [ServicePriceController::class, 'index'])->name('service-prices.index'); // Lấy danh sách giá dịch vụ của khu nhà
+    Route::get('service-prices', [ServicePriceController::class, 'indexGlobal'])->name('service-prices.index-global'); // Danh sách giá mặc định (property_id = null)
+    Route::get('properties/{propertyId}/service-prices', [ServicePriceController::class, 'index'])->name('service-prices.index'); // Giá áp dụng cho khu nhà (riêng + fallback mặc định)
     Route::post('service-prices', [ServicePriceController::class, 'store'])->name('service-prices.store');
-    Route::get('service-prices/{id}', [ServicePriceController::class, '    show'])->name('service-prices.show');
+    Route::get('service-prices/{id}', [ServicePriceController::class, 'show'])->name('service-prices.show');
     Route::put('service-prices/{id}', [ServicePriceController::class, 'update'])->name('service-prices.update');
-    Route::delete('service-prices/{id}', [ServicePriceController::class, 'destroy'])->name('service-prices.destroy');  
+    Route::delete('service-prices/{id}', [ServicePriceController::class, 'destroy'])->name('service-prices.destroy');
 });
