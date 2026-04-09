@@ -5,10 +5,12 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\LeaseController;
 use App\Http\Controllers\Api\V1\LeaseMemberController;
+use App\Http\Controllers\Api\V1\MeterReadingController;
 use App\Http\Controllers\Api\V1\PropertyController;
 use App\Http\Controllers\Api\V1\RoomController;
 use App\Http\Controllers\Api\V1\ServicePriceController;
 use App\Http\Controllers\Api\V1\TenantController;
+use App\Models\Room;
 use Illuminate\Support\Facades\Route;
 use Symfony\Component\Routing\Router;
 
@@ -71,4 +73,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('service-prices/{id}', [ServicePriceController::class, 'show'])->name('service-prices.show');
     Route::put('service-prices/{id}', [ServicePriceController::class, 'update'])->name('service-prices.update');
     Route::delete('service-prices/{id}', [ServicePriceController::class, 'destroy'])->name('service-prices.destroy');
+
+    // ── Meter Readings (Chỉ số tiêu thụ) ─────────────────────────────────
+    Route::get('leases/{leaseId}/readings',  [MeterReadingController::class, 'index'])->name('leases.readings.index');
+    Route::post('leases/{leaseId}/readings', [MeterReadingController::class, 'store'])->name('leases.readings.store');
+    Route::get('readings/{id}',              [MeterReadingController::class, 'show'])->name('readings.show');
+    Route::put('readings/{id}',              [MeterReadingController::class, 'update'])->name('readings.update');
+    Route::delete('readings/{id}',           [MeterReadingController::class, 'destroy'])->name('readings.destroy');
 });
