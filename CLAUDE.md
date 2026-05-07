@@ -43,7 +43,7 @@ Response ← ApiResource ← Controller ← Service
 
 ---
 
-## 3. CẤU TRÚC THƯ MỤC
+## 3. CẤU TRÚC THƯ MỤC.
 
 ```
 app/
