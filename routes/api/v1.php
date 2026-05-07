@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\PropertyController;
 use App\Http\Controllers\Api\V1\RoomController;
 use App\Http\Controllers\Api\V1\ServicePriceController;
 use App\Http\Controllers\Api\V1\TenantController;
+use App\Http\Controllers\InvoiceController;
 use App\Models\Room;
 use Illuminate\Support\Facades\Route;
 use Symfony\Component\Routing\Router;
@@ -80,4 +81,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('readings/{id}',              [MeterReadingController::class, 'show'])->name('readings.show');
     Route::put('readings/{id}',              [MeterReadingController::class, 'update'])->name('readings.update');
     Route::delete('readings/{id}',           [MeterReadingController::class, 'destroy'])->name('readings.destroy');
+
+    // ── Invoices (Hóa đơn) ───────────────────────────────────────────────
+    Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index');
+    Route::post('invoices', [InvoiceController::class, 'store'])->name('invoices.store');
+    Route::post('invoices/bulk-create', [InvoiceController::class, 'bulkCreate'])->name('invoices.bulk-create'); // Tạo hóa đơn hàng loạt cho tất cả hợp đồng thuê đang hoạt động
+    Route::get('invoices/{id}',             [InvoiceController::class, 'show'])->name('invoices.show');
+    Route::put('invoices/{id}',             [InvoiceController::class, 'update'])->name('invoices.update');
+    Route::delete('invoices/{id}',          [InvoiceController::class, 'destroy '])->name('invoices.destroy');
 });
