@@ -34,7 +34,7 @@ Route → Middleware → FormRequest → Controller → Service → Model (Eloqu
 Response ← ApiResource ← Controller ← Service
 ```
 
-### Nguyên tắc cốt lõi
+### Nguyên tắc cốt lõi.
 
 - **Controller**: Gọi Eloquent trực tiếp cho CRUD đơn giản. Chỉ tạo Service khi controller vượt ~150 dòng hoặc cần dùng lại logic ở nhiều chỗ.
 - **Service**: CHỈ dùng cho nghiệp vụ thực sự phức tạp: Auth, tính hóa đơn, xử lý thanh toán, trả phòng tổng hợp...
@@ -43,7 +43,7 @@ Response ← ApiResource ← Controller ← Service
 
 ---
 
-## 3. CẤU TRÚC THƯ MỤC.
+## 3. CẤU TRÚC THƯ MỤC..
 
 ```
 app/
