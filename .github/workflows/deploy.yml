@@ -75,4 +75,4 @@ jobs:
             php artisan view:cache
 
             # 3. Chạy Seeder để đảm bảo các Role cốt lõi luôn tồn tại
-            php artisan db:seed --class=RoleAndPermissionSeeder --force
+            php artisan db:seed --class=DatabaseSeeder --force
