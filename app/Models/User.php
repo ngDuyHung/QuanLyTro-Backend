@@ -22,6 +22,8 @@ class User extends Authenticatable
         'name',
         'email',
         'phone',
+        'zalo_id',
+        'zalo_linked_at',
         'is_active',
         'password',
     ];
@@ -33,6 +35,7 @@ class User extends Authenticatable
 
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'zalo_linked_at'   => 'datetime',
         'is_active'         => 'boolean',
         'password'          => 'hashed',
     ];

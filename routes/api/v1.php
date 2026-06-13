@@ -29,6 +29,10 @@ use Symfony\Component\Routing\Router;
 Route::middleware('throttle:auth')->group(function (): void {
     Route::post('auth/login', [AuthController::class, 'login'])->name('auth.login');
     Route::post('auth/register', [AuthController::class, 'register'])->name('auth.register');
+
+    Route::post('auth/zalo/login', [AuthController::class, 'zaloLogin'])
+        ->name('auth.zalo.login');
+
 });
 
 // ── Authenticated routes ───────────────────────────────────────────────────

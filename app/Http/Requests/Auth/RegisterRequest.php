@@ -17,24 +17,27 @@ class RegisterRequest extends FormRequest
     {
         return [
             'name'                  => ['required', 'string', 'max:255'],
-            'email'                 => ['required', 'email', 'unique:users,email'],
+            'phone'                 => ['required', 'string', 'unique:users,phone', 'regex:/^0[0-9]{9,10}$/'],
             'password'              => ['required', 'string', 'min:8', 'confirmed'],
-            'phone'                 => ['nullable', 'string', 'regex:/^[0-9]{10,11}$/'],
         ];
     }
 
     public function messages(): array
     {
         return [
-            'name.required'         => 'Họ tên không được để trống.',
-            'name.max'              => 'Họ tên không được vượt quá 255 ký tự.',
-            'email.required'        => 'Email không được để trống.',
-            'email.email'           => 'Email không đúng định dạng.',
-            'email.unique'          => 'Email này đã được sử dụng.',
-            'password.required'     => 'Mật khẩu không được để trống.',
-            'password.min'          => 'Mật khẩu phải có ít nhất :min ký tự.',
-            'password.confirmed'    => 'Xác nhận mật khẩu không khớp.',
-            'phone.regex'           => 'Số điện thoại không hợp lệ (10-11 chữ số).',
+            'name.required'      => 'Họ tên không được để trống.',
+            'name.string'        => 'Họ tên không hợp lệ.',
+            'name.max'           => 'Họ tên không được vượt quá 255 ký tự.',
+
+            'phone.required'     => 'Số điện thoại không được để trống.',
+            'phone.string'       => 'Số điện thoại không hợp lệ.',
+            'phone.unique'       => 'Số điện thoại này đã được sử dụng.',
+            'phone.regex'        => 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng số 0.',
+
+            'password.required'  => 'Mật khẩu không được để trống.',
+            'password.string'    => 'Mật khẩu không hợp lệ.',
+            'password.min'       => 'Mật khẩu phải có ít nhất :min ký tự.',
+            'password.confirmed' => 'Xác nhận mật khẩu không khớp.',
         ];
     }
 
@@ -42,17 +45,20 @@ class RegisterRequest extends FormRequest
     {
         return [
             'name'     => 'họ tên',
-            'email'    => 'email',
-            'password' => 'mật khẩu',
             'phone'    => 'số điện thoại',
+            'password' => 'mật khẩu',
         ];
     }
 
     protected function prepareForValidation(): void
     {
         $this->merge([
-            'email' => strtolower(trim($this->email ?? '')),
-            'phone' => $this->phone ? preg_replace('/\D/', '', $this->phone) : null,
+            // Loại bỏ khoảng trắng ở đầu và cuối họ tên trước khi xác thực
+            'name'  => trim((string) $this->input('name', '')),
+            // Loại bỏ khoảng trắng, dấu chấm, dấu gạch ngang khỏi số điện thoại trước khi xác thực
+            'phone' => $this->input('phone')
+                ? preg_replace('/\D/', '', (string) $this->input('phone'))
+                : null,
         ]);
     }
 }

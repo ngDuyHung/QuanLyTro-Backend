@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sequence Auth - Quan Ly Tro API</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f6f7fb;
+            --surface: #ffffff;
+            --surface-soft: #f0f4f8;
+            --text: #172033;
+            --muted: #5b667a;
+            --line: #d7dde8;
+            --primary: #2563eb;
+            --primary-soft: #e8f0ff;
+            --success: #0f766e;
+            --success-soft: #e6f6f4;
+            --warn: #b45309;
+            --warn-soft: #fff4df;
+            --danger: #b91c1c;
+            --danger-soft: #ffe8e8;
+            --code: #111827;
+            --shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Arial, Helvetica, sans-serif;
+            line-height: 1.55;
+        }
+
+        main {
+            width: min(1180px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 34px 0 56px;
+        }
+
+        header {
+            margin-bottom: 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+            margin: 0;
+            letter-spacing: 0;
+        }
+
+        h1 {
+            font-size: clamp(28px, 4vw, 44px);
+            line-height: 1.12;
+        }
+
+        h2 {
+            margin-top: 34px;
+            margin-bottom: 14px;
+            font-size: 24px;
+        }
+
+        h3 {
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        p {
+            margin: 8px 0;
+        }
+
+        .lead {
+            max-width: 860px;
+            color: var(--muted);
+            font-size: 16px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            margin: 22px 0 10px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 18px;
+        }
+
+        .metric {
+            min-height: 118px;
+        }
+
+        .metric strong {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--primary);
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+
+        .metric span {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .section {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 20px;
+            margin-top: 16px;
+            overflow: hidden;
+        }
+
+        .sequence {
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+
+        .sequence table {
+            width: 100%;
+            min-width: 920px;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        .sequence th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: var(--surface-soft);
+            border: 1px solid var(--line);
+            padding: 12px 10px;
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .sequence td {
+            height: 64px;
+            border-left: 1px solid var(--line);
+            border-right: 1px solid var(--line);
+            padding: 8px;
+            vertical-align: middle;
+        }
+
+        .sequence tr:last-child td {
+            border-bottom: 1px solid var(--line);
+        }
+
+        .step {
+            border-radius: 7px;
+            padding: 9px 10px;
+            font-size: 13px;
+        }
+
+        .call {
+            background: var(--primary-soft);
+            border: 1px solid #bfd4ff;
+            color: #153e93;
+        }
+
+        .db {
+            background: var(--success-soft);
+            border: 1px solid #a7ded8;
+            color: #0b615b;
+        }
+
+        .error {
+            background: var(--danger-soft);
+            border: 1px solid #ffc4c4;
+            color: #8f1717;
+        }
+
+        .note {
+            background: var(--warn-soft);
+            border: 1px solid #ffd990;
+            color: #884b08;
+        }
+
+        .return {
+            background: #eef2f7;
+            border: 1px solid #ccd5e2;
+            color: #344154;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        code,
+        pre {
+            font-family: Consolas, "Courier New", monospace;
+        }
+
+        code {
+            color: var(--code);
+            background: #eef2f7;
+            border-radius: 5px;
+            padding: 2px 5px;
+            font-size: 0.94em;
+        }
+
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #101827;
+            color: #f8fafc;
+            border-radius: 8px;
+            padding: 14px;
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            margin-top: 14px;
+        }
+
+        .list {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .list li {
+            margin: 7px 0;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 760px;
+        }
+
+        .info-table th,
+        .info-table td {
+            border: 1px solid var(--line);
+            padding: 11px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .info-table th {
+            background: var(--surface-soft);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            min-height: 24px;
+            border-radius: 999px;
+            padding: 2px 10px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .badge.public {
+            background: var(--primary-soft);
+            color: var(--primary);
+        }
+
+        .badge.auth {
+            background: var(--success-soft);
+            color: var(--success);
+        }
+
+        .source {
+            display: grid;
+            gap: 8px;
+            margin-top: 14px;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        @media (max-width: 900px) {
+            .grid,
+            .two-col {
+                grid-template-columns: 1fr;
+            }
+
+            main {
+                width: min(100% - 20px, 1180px);
+                padding-top: 22px;
+            }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <h1>Sequence Auth: Đăng nhập và đăng ký</h1>
+        <p class="lead">
+            Tài liệu này mô tả luồng xác thực hiện tại của dự án <strong>quanlytro-api</strong>.
+            API dùng Laravel Sanctum, trả Bearer token, chuẩn hóa JSON bằng middleware
+            <code>force.json</code>, và áp dụng rate limit <code>10 request/phút/IP</code> cho đăng nhập, đăng ký.
+        </p>
+    </header>
+
+    <section class="grid" aria-label="Tổng quan Auth">
+        <div class="card metric">
+            <strong>Base route</strong>
+            <span><code>/api/v1</code> qua <code>routes/api.php</code> và <code>routes/api/v1.php</code>.</span>
+        </div>
+        <div class="card metric">
+            <strong>Public Auth</strong>
+            <span><code>POST /auth/login</code> và <code>POST /auth/register</code>, có <code>throttle:auth</code>.</span>
+        </div>
+        <div class="card metric">
+            <strong>Token</strong>
+            <span>Sanctum token tên <code>api_token</code>, hết hạn sau 30 ngày.</span>
+        </div>
+        <div class="card metric">
+            <strong>Protected Auth</strong>
+            <span><code>POST /auth/logout</code> và <code>GET /auth/me</code> yêu cầu <code>auth:sanctum</code>.</span>
+        </div>
+    </section>
+
+    <h2>Sequence đăng nhập</h2>
+    <section class="section">
+        <div class="sequence" role="region" aria-label="Sequence diagram đăng nhập" tabindex="0">
+            <table>
+                <thead>
+                <tr>
+                    <th>Client</th>
+                    <th>Route/Middleware</th>
+                    <th>LoginRequest</th>
+                    <th>AuthController</th>
+                    <th>AuthService</th>
+                    <th>Database/Sanctum</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td><div class="step call">1. Gửi <code>POST /api/v1/auth/login</code><br>Email + password</div></td>
+                    <td><div class="step note">2. <code>force.json</code> đặt header Accept JSON; <code>throttle:auth</code> giới hạn 10 lần/phút/IP</div></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step call">3. Chuẩn hóa email: <code>trim</code> + <code>strtolower</code></div></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step call">4. Validate: email bắt buộc, đúng định dạng; password bắt buộc</div></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step error">Sai dữ liệu: trả <code>422</code> + errors</div></td>
+                    <td><div class="step call">5. Gọi <code>AuthService::login()</code> với dữ liệu đã validate</div></td>
+                    <td><div class="step call">6. <code>Auth::attempt($credentials)</code></div></td>
+                    <td><div class="step db">7. Kiểm tra user và password hash trong bảng <code>users</code></div></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step error">Email/password sai: throw <code>BusinessException</code> mã <code>401</code></div></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step note">8. Nếu <code>is_active = false</code>: logout session và trả <code>403</code></div></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step call">9. Xóa token cũ cùng tên <code>api_token</code></div></td>
+                    <td><div class="step db">10. Delete trong <code>personal_access_tokens</code> theo user + token name</div></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step call">11. Tạo token mới: <code>createToken('api_token', expiresAt: now()+30 days)</code></div></td>
+                    <td><div class="step db">12. Lưu hash token và <code>expires_at</code> vào <code>personal_access_tokens</code></div></td>
+                </tr>
+                <tr>
+                    <td><div class="step return">14. Nhận JSON gồm user, access_token, token_type, expires_at</div></td>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step return">13. Trả <code>200 OK</code> qua <code>UserResource</code></div></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <div class="two-col">
+        <section class="section">
+            <h3>Request đăng nhập</h3>
+            <pre>{
+  "email": "owner@example.com",
+  "password": "password123"
+}</pre>
+        </section>
+        <section class="section">
+            <h3>Response đăng nhập thành công</h3>
+            <pre>{
+  "message": "Đăng nhập thành công.",
+  "user": {
+    "id": 1,
+    "name": "Nguyen Van A",
+    "email": "owner@example.com",
+    "phone": "0901234567",
+    "role": "landlord",
+    "role_label": "...",
+    "is_active": true,
+    "created_at": "2026-..."
+  },
+  "access_token": "...",
+  "token_type": "Bearer",
+  "expires_at": "2026-..."
+}</pre>
+        </section>
+    </div>
+
+    <h2>Sequence đăng ký</h2>
+    <section class="section">
+        <div class="sequence" role="region" aria-label="Sequence diagram đăng ký" tabindex="0">
+            <table>
+                <thead>
+                <tr>
+                    <th>Client</th>
+                    <th>Route/Middleware</th>
+                    <th>RegisterRequest</th>
+                    <th>AuthController</th>
+                    <th>AuthService</th>
+                    <th>Database/Sanctum</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td><div class="step call">1. Gửi <code>POST /api/v1/auth/register</code><br>Name, email, password, password_confirmation, phone</div></td>
+                    <td><div class="step note">2. <code>force.json</code> + <code>throttle:auth</code></div></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step call">3. Chuẩn hóa email; phone chỉ giữ chữ số bằng <code>preg_replace('/\\D/', '')</code></div></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step call">4. Validate name, email unique, password min 8 + confirmed, phone 10-11 chữ số</div></td>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step db">5. Kiểm tra unique email trong bảng <code>users</code></div></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step error">Sai dữ liệu hoặc trùng email: trả <code>422</code> + errors</div></td>
+                    <td><div class="step call">6. Gọi <code>AuthService::register()</code> với dữ liệu đã validate</div></td>
+                    <td><div class="step call">7. Hash password bằng <code>Hash::make()</code>, đặt <code>is_active = true</code></div></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step call">8. Tạo user mới bằng <code>User::create($data)</code></div></td>
+                    <td><div class="step db">9. Insert vào bảng <code>users</code></div></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step call">10. Gán role <code>landlord</code> bằng Spatie Permission</div></td>
+                    <td><div class="step db">11. Ghi quan hệ role cho user</div></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step call">12. Tạo Sanctum token <code>api_token</code>, hết hạn sau 30 ngày</div></td>
+                    <td><div class="step db">13. Insert token hash vào <code>personal_access_tokens</code></div></td>
+                </tr>
+                <tr>
+                    <td><div class="step return">15. Nhận JSON gồm user, access_token, token_type, expires_at</div></td>
+                    <td></td>
+                    <td></td>
+                    <td><div class="step return">14. Trả <code>201 Created</code> qua <code>UserResource</code></div></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <div class="two-col">
+        <section class="section">
+            <h3>Request đăng ký</h3>
+            <pre>{
+  "name": "Nguyen Van A",
+  "email": "owner@example.com",
+  "password": "password123",
+  "password_confirmation": "password123",
+  "phone": "0901234567"
+}</pre>
+        </section>
+        <section class="section">
+            <h3>Response đăng ký thành công</h3>
+            <pre>{
+  "message": "Đăng ký thành công.",
+  "user": {
+    "id": 1,
+    "name": "Nguyen Van A",
+    "email": "owner@example.com",
+    "phone": "0901234567",
+    "role": "landlord",
+    "role_label": "...",
+    "is_active": true,
+    "created_at": "2026-..."
+  },
+  "access_token": "...",
+  "token_type": "Bearer",
+  "expires_at": "2026-..."
+}</pre>
+        </section>
+    </div>
+
+    <h2>Endpoint và lỗi chính</h2>
+    <section class="section table-wrap">
+        <table class="info-table">
+            <thead>
+            <tr>
+                <th>Endpoint</th>
+                <th>Middleware</th>
+                <th>Điều kiện</th>
+                <th>Kết quả</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td><code>POST /api/v1/auth/login</code></td>
+                <td><span class="badge public">public</span> <code>force.json</code>, <code>throttle:auth</code></td>
+                <td>Email/password hợp lệ, user tồn tại, password đúng, <code>is_active = true</code>.</td>
+                <td><code>200 OK</code>, trả Bearer token. Token cũ tên <code>api_token</code> của user bị xóa trước khi cấp token mới.</td>
+            </tr>
+            <tr>
+                <td><code>POST /api/v1/auth/register</code></td>
+                <td><span class="badge public">public</span> <code>force.json</code>, <code>throttle:auth</code></td>
+                <td>Email chưa tồn tại, password xác nhận khớp, phone nếu có phải 10-11 chữ số.</td>
+                <td><code>201 Created</code>, tạo user active, gán role <code>landlord</code>, trả Bearer token.</td>
+            </tr>
+            <tr>
+                <td><code>POST /api/v1/auth/logout</code></td>
+                <td><span class="badge auth">auth</span> <code>auth:sanctum</code></td>
+                <td>Header <code>Authorization: Bearer &lt;token&gt;</code> hợp lệ.</td>
+                <td>Xóa token hiện tại trong <code>personal_access_tokens</code>, trả thông báo đăng xuất thành công.</td>
+            </tr>
+            <tr>
+                <td><code>GET /api/v1/auth/me</code></td>
+                <td><span class="badge auth">auth</span> <code>auth:sanctum</code></td>
+                <td>Bearer token hợp lệ, chưa hết hạn.</td>
+                <td>Trả thông tin user qua <code>UserResource</code>.</td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section class="section">
+        <h3>Nhánh lỗi cần chú ý</h3>
+        <ul class="list">
+            <li><code>422 Unprocessable Entity</code>: request không hợp lệ, ví dụ thiếu email/password, email sai định dạng, email đăng ký đã tồn tại, password không khớp confirmation.</li>
+            <li><code>401 Unauthorized</code>: đăng nhập sai email hoặc mật khẩu; hoặc truy cập route protected khi chưa có token/hết phiên.</li>
+            <li><code>403 Forbidden</code>: user đăng nhập đúng nhưng <code>is_active = false</code>.</li>
+            <li><code>429 Too Many Requests</code>: vượt <code>10 request/phút/IP</code> trên login/register.</li>
+        </ul>
+    </section>
+
+    <section class="section">
+        <h3>Cách gọi các route protected sau khi đăng nhập/đăng ký</h3>
+        <pre>Authorization: Bearer &lt;access_token&gt;
+Accept: application/json</pre>
+        <p class="muted">
+            Token trả về chỉ hiển thị một lần ở response. Trong database, Sanctum lưu hash của token trong bảng
+            <code>personal_access_tokens</code>, không lưu plain text token.
+        </p>
+    </section>
+
+    <section class="source">
+        <strong>File nguồn đã đối chiếu</strong>
+        <span><code>routes/api.php</code>, <code>routes/api/v1.php</code>, <code>app/Http/Controllers/Api/V1/AuthController.php</code></span>
+        <span><code>app/Services/AuthService.php</code>, <code>app/Http/Requests/Auth/LoginRequest.php</code>, <code>app/Http/Requests/Auth/RegisterRequest.php</code></span>
+        <span><code>bootstrap/app.php</code>, <code>app/Providers/AppServiceProvider.php</code>, <code>app/Http/Resources/User/UserResource.php</code></span>
+    </section>
+</main>
+</body>
+</html>

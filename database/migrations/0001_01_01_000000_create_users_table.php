@@ -25,9 +25,17 @@ return new class extends Migration
         Schema::create('users', function (Blueprint $table) {
             $table->id()->comment('ID người dùng');
             $table->string('name')->comment('Tên người dùng');
-            $table->string('email')->unique()->comment('Email unique');
-            $table->string('phone', 15)->nullable()->index()
-                ->comment('Số điện thoại, dùng để tìm kiếm');
+
+            $table->string('phone', 10)
+                ->unique()
+                ->comment('Số điện thoại unique, dùng để đăng nhập');
+
+            $table->string('email')
+                ->nullable()
+                ->unique()
+                ->comment('Email, có thể bổ sung sau');
+            $table->string('zalo_id')->nullable()->unique()->comment('ID Zalo, có thể bổ sung sau');
+            $table->timestamp('zalo_linked_at')->nullable()->comment('Thời điểm liên kết Zalo');
             $table->enum('role', ['admin', 'landlord', 'tenant'])
                 ->default('tenant')
                 ->index()
