@@ -18,14 +18,55 @@ return new class extends Migration
     {
         Schema::create('properties', function (Blueprint $table) {
             $table->id()->comment('ID khu nhà');
+
             $table->unsignedBigInteger('user_id')
                 ->comment('FK users - chủ trọ sở hữu khu nhà');
 
-            $table->string('property_type', 50)->comment('Loại khu nhà');
-            $table->string('name', 100)->comment('Tên khu nhà trọ');
-            $table->string('address', 255)->comment('Địa chỉ chi tiết');
-            $table->text('description')->nullable()
-                ->comment('Mô tả thêm về khu nhà');
+            $table->string('property_type', 50)
+                ->default('boarding_house')
+                ->comment('Loại khu nhà: boarding_house, apartment,house...');
+
+            $table->string('name', 150)
+                ->comment('Tên khu nhà trọ');
+
+            $table->string('code', 50)
+                ->comment('Mã khu nhà, ví dụ: KHU-A, KHU-E');
+
+            $table->string('status', 30)
+                ->default('active')
+                ->comment('Trạng thái: active, inactive');
+
+            $table->unsignedSmallInteger('floors_count')
+                ->default(0)
+                ->comment('Số tầng của khu nhà, 0 nếu không phân tầng');
+
+            $table->unsignedSmallInteger('expected_rooms_count')
+                ->default(0)
+                ->comment('Số phòng dự kiến trong khu nhà');
+
+            $table->string('manager_name', 100)
+                ->nullable()
+                ->comment('Người quản lý hoặc người liên hệ chính');
+
+            $table->string('address', 255)
+                ->comment('Địa chỉ chi tiết khu nhà');
+
+            $table->decimal('latitude', 10, 7)
+                ->nullable()
+                ->comment('Vĩ độ Google Map');
+
+            $table->decimal('longitude', 10, 7)
+                ->nullable()
+                ->comment('Kinh độ Google Map');
+
+            $table->string('cover_image_path', 255)
+                ->nullable()
+                ->comment('Đường dẫn ảnh đại diện khu nhà');
+
+            $table->text('description')
+                ->nullable()
+                ->comment('Ghi chú hoặc mô tả thêm về khu nhà');
+
             $table->timestamps();
 
             $table->foreign('user_id')
@@ -33,7 +74,12 @@ return new class extends Migration
                 ->on('users')
                 ->onDelete('restrict');
 
+            $table->unique(['user_id', 'code'], 'properties_user_code_unique');
+
             $table->index('user_id');
+            $table->index('status');
+            $table->index('property_type');
+            $table->index(['user_id', 'status']);
         });
     }
 

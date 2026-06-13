@@ -23,7 +23,7 @@ class DatabaseSeeder extends Seeder
 
         // Tạo tài khoản admin mặc định
         $admin = User::firstOrCreate(
-            ['email' => 'admin@quanlytro.com'],
+            ['phone' => '0123456789'], // Số điện thoại cố định cho admin
             [
                 'name'      => 'Admin',
                 'password'  => bcrypt('password'),

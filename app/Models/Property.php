@@ -20,12 +20,24 @@ class Property extends Model
         'user_id',
         'property_type',
         'name',
+        'code',
+        'status',
+        'floors_count',
+        'expected_rooms_count',
+        'manager_name',
         'address',
+        'latitude',
+        'longitude',
+        'cover_image_path',
         'description',
     ];
 
     protected $casts = [
         'property_type' => PropertyType::class,
+        'floors_count' => 'integer',
+        'expected_rooms_count' => 'integer',
+        'latitude' => 'decimal:7',
+        'longitude' => 'decimal:7',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
