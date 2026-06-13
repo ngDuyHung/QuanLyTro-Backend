@@ -125,8 +125,8 @@ class AuthService
         $payload = Cache::get($cacheKey);
 
         if (! $payload || empty($payload['zalo_id'])) {
-            //throw new BusinessException('Phiên liên kết Zalo đã hết hạn hoặc không hợp lệ.', 401);
-            return;
+            throw new BusinessException('Phiên liên kết Zalo đã hết hạn hoặc không hợp lệ.', 401);
+            //return;
         }
 
         $zaloId = (string) $payload['zalo_id'];
