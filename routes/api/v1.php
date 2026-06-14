@@ -48,6 +48,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('properties/{propertyId}/rooms', [RoomController::class, 'store'])->name('properties.rooms.store');
 
     // Chi tiết, cập nhật, xóa, đổi trạng thái phòng
+    Route::get('/rooms', [RoomController::class, 'all'])->name('rooms.all');
     Route::get('rooms/{room}', [RoomController::class, 'show'])->name('rooms.show');
     Route::put('rooms/{room}', [RoomController::class, 'update'])->name('rooms.update');
     Route::delete('rooms/{room}', [RoomController::class, 'destroy'])->name('rooms.destroy');

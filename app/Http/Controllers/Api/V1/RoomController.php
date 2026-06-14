@@ -19,9 +19,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
+use App\Services\RoomService;
 
 class RoomController extends Controller
 {
+    public function __construct(
+        private readonly RoomService $roomService
+    ) {}
+
     /**
      * Lấy danh sách phòng trong khu nhà (có filter status, search tên phòng).
      * Ownership check: khu nhà phải thuộc về user đang đăng nhập.
@@ -45,6 +50,47 @@ class RoomController extends Controller
             ->paginate($request->integer('per_page', 15));
 
         return RoomResource::collection($rooms)->response();
+    }
+
+
+    public function all(Request $request): JsonResponse
+    {
+        $rooms = Room::with([
+            'property',
+            'images' => fn($query) => $query->orderBy('sort_order'),
+        ])
+            ->whereHas(
+                'property',
+                fn($query) =>
+                $query->where('user_id', $request->user()->id)
+            )
+            ->when($request->filled('property_id'), function ($query) use ($request) {
+                $query->where('property_id', $request->integer('property_id'));
+            })
+            ->when($request->filled('status'), function ($query) use ($request) {
+                $query->where('status', $request->status);
+            })
+            ->when($request->filled('search'), function ($query) use ($request) {
+                $search = trim((string) $request->search);
+
+                $query->where(function ($subQuery) use ($search) {
+                    $subQuery
+                        ->where('name', 'like', "%{$search}%")
+                        ->orWhereHas('property', function ($propertyQuery) use ($search) {
+                            $propertyQuery
+                                ->where('name', 'like', "%{$search}%")
+                                ->orWhere('address', 'like', "%{$search}%");
+                        });
+                });
+            })
+            ->latest()
+            ->paginate($request->integer('per_page', 10));
+
+        return RoomResource::collection($rooms)
+            ->additional([
+                'stats' => $this->getRoomStats($request),
+            ])
+            ->response();
     }
 
     /**
@@ -130,35 +176,95 @@ class RoomController extends Controller
             throw $exception;
         }
     }
+
+
     /**
      * Cập nhật thông tin phòng.
      * Nếu thay đổi current_price → tự động ghi room_price_histories.
+     * Hỗ trợ thêm ảnh mới, xóa ảnh cũ và đổi ảnh bìa.
      */
     public function update(UpdateRoomRequest $request, int $id): RoomResource
     {
-        $room = Room::whereHas('property', fn($q) => $q->where('user_id', $request->user()->id))
+        $room = Room::with(['images' => fn($query) => $query->orderBy('sort_order')])
+            ->whereHas('property', fn($query) => $query->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
-        $validated   = $request->validated();
-        $oldPrice    = $room->current_price;
-        $newPrice    = $validated['current_price'] ?? null;
+        $storedPaths = [];
+        $pathsToDeleteAfterCommit = [];
 
-        $room->update($validated);
+        try {
+            DB::beginTransaction();
 
-        // Tự động ghi lịch sử khi giá thay đổi
-        if ($newPrice !== null && (int) $newPrice !== (int) $oldPrice) {
-            RoomPriceHistory::create([
-                'room_id' => $room->id,
-                'user_id' => $request->user()->id,
-                'old_price' => (int) $oldPrice,
-                'new_price' => (int) $newPrice,
-                'effective_date' => now()->toDateString(),
-                'note' => $request->input('price_note'),
+            $validated = $request->validated();
+
+            $images = $request->file('images', []);
+
+            $deletedImageIds = $validated['deleted_image_ids'] ?? [];
+
+            $coverImageId = isset($validated['cover_image_id'])
+                ? (int) $validated['cover_image_id']
+                : null;
+
+            $coverImageIndex = isset($validated['cover_image_index'])
+                ? (int) $validated['cover_image_index']
+                : null;
+
+            unset(
+                $validated['images'],
+                $validated['deleted_image_ids'],
+                $validated['cover_image_id'],
+                $validated['cover_image_index']
+            );
+
+            $oldPrice = $room->current_price;
+            $newPrice = $validated['current_price'] ?? null;
+
+            //1. Cập nhật thông tin phòng
+            $room->update($validated);
+
+            //2. Ghi lịch sử giá nếu thay đổi
+            if ($newPrice !== null && (int) $newPrice !== (int) $oldPrice) {
+                RoomPriceHistory::create([
+                    'room_id' => $room->id,
+                    'user_id' => $request->user()->id,
+                    'old_price' => (int) $oldPrice,
+                    'new_price' => (int) $newPrice,
+                    'effective_date' => now()->toDateString(),
+                    'note' => $request->input('price_note'),
+                ]);
+            }
+
+            //3. Đồng bộ ảnh phòng
+            $imageSyncResult = $this->roomService->syncImages(
+                room: $room,
+                newImages: $images,
+                deletedImageIds: $deletedImageIds,
+                coverImageId: $coverImageId,
+                coverImageIndex: $coverImageIndex
+            );
+
+            $storedPaths = $imageSyncResult['stored_paths'];
+            $pathsToDeleteAfterCommit = $imageSyncResult['paths_to_delete_after_commit'];
+
+            DB::commit();
+
+            //4. Sau khi DB commit thành công mới xóa file ảnh cũ 
+            $this->roomService->deleteFiles($pathsToDeleteAfterCommit);
+
+            $room->load([
+                'property',
+                'images' => fn($query) => $query->orderBy('sort_order'),
             ]);
-        }
 
-        $room->load(['images' => fn($query) => $query->orderBy('sort_order')]);
-        return new RoomResource($room);
+            return new RoomResource($room);
+        } catch (Throwable $exception) {
+            DB::rollBack();
+
+            //Nếu lỗi sau khi đã upload ảnh mới thì xóa file mới để tránh rác storage
+            $this->roomService->deleteFiles($storedPaths);
+
+            throw $exception;
+        }
     }
 
     /**
@@ -166,16 +272,34 @@ class RoomController extends Controller
      */
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $room = Room::whereHas('property', fn($q) => $q->where('user_id', $request->user()->id))
+        $room = Room::with('images')
+            ->whereHas('property', fn($query) => $query->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
         if ($room->status !== RoomStatus::Available) {
             throw new BusinessException('Chỉ có thể xóa phòng đang ở trạng thái trống.');
         }
 
-        $room->delete();
+        $pathsToDeleteAfterCommit = [];
 
-        return response()->json(['message' => 'Xóa phòng thành công.']);
+        try {
+            DB::beginTransaction();
+
+            $pathsToDeleteAfterCommit = $this->roomService
+                ->deleteAllImageRecords($room);
+
+            $room->delete();
+
+            DB::commit();
+
+            $this->roomService->deleteFiles($pathsToDeleteAfterCommit);
+
+            return response()->json(['message' => 'Xóa phòng thành công.']);
+        } catch (Throwable $exception) {
+            DB::rollBack();
+
+            throw $exception;
+        }
     }
 
     /**
@@ -198,5 +322,61 @@ class RoomController extends Controller
         $room->load(['images' => fn($query) => $query->orderBy('sort_order')]);
 
         return new RoomResource($room);
+    }
+
+    private function getRoomStats(Request $request): array
+    {
+        $baseQuery = Room::query()
+            ->whereHas(
+                'property',
+                fn($query) =>
+                $query->where('user_id', $request->user()->id)
+            )
+            ->when($request->filled('property_id'), function ($query) use ($request) {
+                $query->where('property_id', $request->integer('property_id'));
+            });
+
+        $total = (clone $baseQuery)->count();
+
+        $available = (clone $baseQuery)
+            ->where('status', RoomStatus::Available->value)
+            ->count();
+
+        $occupied = (clone $baseQuery)
+            ->where('status', RoomStatus::Occupied->value)
+            ->count();
+
+        $maintenance = (clone $baseQuery)
+            ->where('status', RoomStatus::Maintenance->value)
+            ->count();
+
+        $expectedMonthlyRevenue = (clone $baseQuery)
+            ->where('status', RoomStatus::Occupied->value)
+            ->sum('current_price');
+
+        $percent = fn(int $value): int => $total > 0
+            ? (int) round(($value / $total) * 100)
+            : 0;
+
+        return [
+            'total' => $total,
+
+            'occupied' => $occupied,
+            'available' => $available,
+            'maintenance' => $maintenance,
+
+            'occupancy_rate' => $percent($occupied),
+            'available_rate' => $percent($available),
+            'maintenance_rate' => $percent($maintenance),
+
+            // Tạm tính theo tổng giá phòng đang thuê.
+            // Sau này có module hóa đơn/thanh toán thì đổi sang doanh thu thực tế.
+            'expected_monthly_revenue' => (int) $expectedMonthlyRevenue,
+
+            // Chưa có module công nợ/hóa đơn thì tạm để 0.
+            'debt_rooms' => 0,
+            'debt_rate' => 0,
+            'current_debt_amount' => 0,
+        ];
     }
 }

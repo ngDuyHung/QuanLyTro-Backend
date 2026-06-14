@@ -7,6 +7,7 @@ namespace App\Http\Requests\Room;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
 use App\Enums\RoomStatus;
+use App\Models\Room;
 
 class UpdateRoomRequest extends FormRequest
 {
@@ -17,12 +18,14 @@ class UpdateRoomRequest extends FormRequest
 
     public function rules(): array
     {
-        $roomId     = $this->route('room');
+        $roomParam = $this->route('room') ?? $this->route('id');
+        $roomId = is_object($roomParam) ? $roomParam->id : $roomParam;
+
         $propertyId = $this->route('propertyId');
 
-        // Nếu không có propertyId trên route thì lấy từ DB (route /rooms/{id})
-        if (!$propertyId) {
-            $propertyId = \App\Models\Room::find($roomId)?->property_id;
+        // Nếu không tìm thấy propertyId từ route, thử lấy từ roomId (trường hợp route model binding)
+        if (!$propertyId && $roomId) {
+            $propertyId = Room::find($roomId)?->property_id;
         }
 
         return [
@@ -36,6 +39,17 @@ class UpdateRoomRequest extends FormRequest
             'is_public'     => ['sometimes', 'nullable', 'boolean'],
             'status' => ['sometimes', new Enum(RoomStatus::class), 'in:available,maintenance'],
             'description'   => ['sometimes', 'nullable', 'string'],
+
+            'images' => ['nullable', 'array', 'max:5'],
+            'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+
+            'deleted_image_ids' => ['nullable', 'array'],
+            'deleted_image_ids.*' => ['integer'],
+
+            'cover_image_id' => ['nullable', 'integer'],
+            'cover_image_index' => ['nullable', 'integer', 'min:0'],
+
+            'price_note' => ['sometimes', 'nullable', 'string', 'max:255'],
         ];
     }
 
@@ -59,6 +73,8 @@ class UpdateRoomRequest extends FormRequest
             'allow_shared.boolean' => 'Giá trị cho phép ở ghép không hợp lệ.',
             'is_public.boolean' => 'Giá trị đăng công khai không hợp lệ.',
             'status.in' => 'Trạng thái phòng không hợp lệ.',
+            'price_note.max' => 'Ghi chú giá không được vượt quá 255 ký tự.',
+            'description.string' => 'Mô tả phải là chuỗi ký tự.',
         ];
     }
 
@@ -75,6 +91,7 @@ class UpdateRoomRequest extends FormRequest
             'is_public'     => 'đăng công khai',
             'status'        => 'trạng thái',
             'description'   => 'mô tả',
+            'price_note'    => 'ghi chú giá',
         ];
     }
 
