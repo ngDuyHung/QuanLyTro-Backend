@@ -45,7 +45,7 @@ class StorePropertyRequest extends FormRequest
 
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
 
-            'cover_image_path' => ['nullable', 'string', 'max:255'],
+            'cover_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
 
             'description' => ['nullable', 'string', 'max:1000'],
         ];
@@ -86,7 +86,9 @@ class StorePropertyRequest extends FormRequest
             'longitude.numeric' => 'Kinh độ không hợp lệ.',
             'longitude.between' => 'Kinh độ phải nằm trong khoảng -180 đến 180.',
 
-            'cover_image_path.max' => 'Đường dẫn ảnh không vượt quá 255 ký tự.',
+            'cover_image.image' => 'Ảnh đại diện khu nhà không hợp lệ.',
+            'cover_image.mimes' => 'Ảnh đại diện chỉ hỗ trợ định dạng jpg, jpeg, png hoặc webp.',
+            'cover_image.max' => 'Ảnh đại diện không được vượt quá 4MB.',
 
             'description.max' => 'Mô tả không vượt quá 1000 ký tự.',
         ];
@@ -105,7 +107,7 @@ class StorePropertyRequest extends FormRequest
             'address' => 'địa chỉ',
             'latitude' => 'vĩ độ',
             'longitude' => 'kinh độ',
-            'cover_image_path' => 'ảnh đại diện',
+            'cover_image' => 'ảnh đại diện',
             'description' => 'mô tả',
         ];
     }

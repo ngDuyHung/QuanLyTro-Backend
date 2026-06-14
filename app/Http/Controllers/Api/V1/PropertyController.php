@@ -13,6 +13,11 @@ use App\Models\Property;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Throwable;
+
 class PropertyController extends Controller
 {
     public function index(Request $request): JsonResponse
@@ -41,38 +46,110 @@ class PropertyController extends Controller
     }
 
     public function store(StorePropertyRequest $request): JsonResponse
-    {   // ... tự động khớp các cặp key-value từ mảng $request->validated() vào trường tương ứng của model Property
-        //validated có ed là giá trị được xác thực và làm sạch từ file StorePropertyRequest
-        $property = Property::create([
-            ...$request->validated(),
-            'user_id' => $request->user()->id,
-        ]);
-        // Sau khi tạo xong, chúng ta load lại số lượng phòng để trả về trong response
-        $property->loadCount('rooms');
+    {
+        $storedPath = null;
 
-        return (new PropertyResource($property))->response()->setStatusCode(201);
+        try {
+            DB::beginTransaction();
+
+            $data = $request->validated();
+
+            unset($data['cover_image']);
+
+            $data['user_id'] = $request->user()->id;
+
+            $property = Property::create($data);
+
+            if ($request->hasFile('cover_image')) {
+                $storedPath = $request
+                    ->file('cover_image')
+                    ->store("properties/{$property->id}", 'public');
+
+                $property->update([
+                    'cover_image_path' => $storedPath,
+                ]);
+            }
+
+            DB::commit();
+
+            return (new PropertyResource($property->fresh()))
+                ->response()
+                ->setStatusCode(201);
+        } catch (Throwable $exception) {
+            DB::rollBack();
+
+            if ($storedPath) {
+                Storage::disk('public')->delete($storedPath);
+            }
+
+            throw $exception;
+        }
     }
 
     public function update(UpdatePropertyRequest $request, int $id): PropertyResource
     {
-        $property = Property::where('user_id', $request->user()->id)->findOrFail($id);
+        $property = Property::where('user_id', $request->user()->id)
+            ->findOrFail($id);
 
-        $property->update($request->validated());
-        $property->loadCount('rooms');
+        $newStoredPath = null;
+        $oldImagePath = $property->cover_image_path;
 
-        return new PropertyResource($property);
+        try {
+            DB::beginTransaction();
+
+            $data = $request->validated();
+
+            unset($data['cover_image']);
+
+            if ($request->hasFile('cover_image')) {
+                $newStoredPath = $request
+                    ->file('cover_image')
+                    ->store("properties/{$property->id}", 'public');
+
+                $data['cover_image_path'] = $newStoredPath;
+            }
+
+            $property->update($data);
+
+            DB::commit();
+
+            if ($newStoredPath && $oldImagePath) {
+                Storage::disk('public')->delete($oldImagePath);
+            }
+
+            return new PropertyResource($property->fresh());
+        } catch (Throwable $exception) {
+            DB::rollBack();
+
+            if ($newStoredPath) {
+                Storage::disk('public')->delete($newStoredPath);
+            }
+
+            throw $exception;
+        }
     }
 
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $property = Property::where('user_id', $request->user()->id)->findOrFail($id);
+        $property = Property::where('user_id', $request->user()->id)
+            ->withCount('rooms')
+            ->findOrFail($id);
 
-        if ($property->rooms()->exists()) {
-            throw new BusinessException('Không thể xóa khu nhà vì vẫn còn phòng bên trong.');
+        if ($property->rooms_count > 0) {
+            throw new BusinessException('Chỉ có thể xóa khu nhà khi chưa có phòng.');
         }
+
+        $propertyId = $property->id;
+        $coverImagePath = $property->cover_image_path;
 
         $property->delete();
 
-        return response()->json(['message' => 'Xóa khu nhà thành công.']);
+        if ($coverImagePath) {
+            Storage::disk('public')->deleteDirectory("properties/{$propertyId}");
+        }
+
+        return response()->json([
+            'message' => 'Xóa khu nhà thành công.',
+        ]);
     }
 }

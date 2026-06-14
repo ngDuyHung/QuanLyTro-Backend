@@ -7,6 +7,7 @@ namespace App\Http\Resources\Property;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
+
 class PropertyResource extends JsonResource
 {
     public function toArray(Request $request): array
@@ -31,6 +32,10 @@ class PropertyResource extends JsonResource
             'longitude' => $this->longitude,
 
             'cover_image_path' => $this->cover_image_path,
+            'cover_image_url' => $this->cover_image_path
+                ? asset('storage/' . ltrim($this->cover_image_path, '/'))
+                : null,
+
             'description' => $this->description,
 
             'total_rooms' => $this->rooms_count ?? 0,
