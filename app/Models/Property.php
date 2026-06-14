@@ -22,12 +22,12 @@ class Property extends Model
         'name',
         'code',
         'status',
-        'floors_count',
+        'floors_count', // Số tầng của khu nhà, 0 nếu không phân tầng
         'expected_rooms_count',
         'manager_name',
         'address',
-        'latitude',
-        'longitude',
+        'latitude', // Vĩ độ Google Map
+        'longitude', // Kinh độ Google Map
         'cover_image_path',
         'description',
     ];

@@ -38,4 +38,31 @@ class UpdateRoomStatusRequest extends FormRequest
             'status' => 'trạng thái phòng',
         ];
     }
+
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+
+        if ($this->has('name')) {
+            $merge['name'] = $this->name ? trim((string) $this->name) : null;
+        }
+
+        if ($this->has('max_occupants')) {
+            $merge['max_occupants'] = $this->filled('max_occupants')
+                ? (int) $this->max_occupants
+                : 0;
+        }
+
+        if ($this->has('allow_shared')) {
+            $merge['allow_shared'] = filter_var($this->allow_shared, FILTER_VALIDATE_BOOLEAN);
+        }
+
+        if ($this->has('is_public')) {
+            $merge['is_public'] = filter_var($this->is_public, FILTER_VALIDATE_BOOLEAN);
+        }
+
+        if (!empty($merge)) {
+            $this->merge($merge);
+        }
+    }
 }

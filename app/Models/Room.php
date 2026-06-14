@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Room extends Model
 {
@@ -20,22 +21,39 @@ class Room extends Model
         'property_id',
         'name',
         'area',
+        'floor_number',
         'max_occupants',
         'current_price',
+        'billing_day', // Ngày trong tháng để tính tiền phòng, 0 nếu tính theo ngày vào
+        'allow_shared', // Cho phép ở ghép
+        'is_public', // Có đăng phòng lên trang công khai hay không
         'status',
         'description',
     ];
 
     protected $casts = [
         'area'          => 'decimal:2',
+        'floor_number' => 'integer',
         'max_occupants' => 'integer',
         'current_price' => 'integer',
+        'billing_day'   => 'integer',
+        'allow_shared'  => 'boolean',
+        'is_public'     => 'boolean',
         'status'        => RoomStatus::class,
         'created_at'    => 'datetime',
         'updated_at'    => 'datetime',
     ];
 
     // ===== Relationships =====
+
+
+    /**
+     * Phòng có nhiều hình ảnh.
+     */
+    public function images(): HasMany
+    {
+        return $this->hasMany(RoomImage::class);
+    }
 
     /**
      * Phòng thuộc về một khu nhà.
@@ -65,11 +83,24 @@ class Room extends Model
 
     public function scopeAvailable(\Illuminate\Database\Eloquent\Builder $query): void
     {
-        $query->where('status', RoomStatus::Available);
+        $query->where('status', RoomStatus::Available->value);
     }
 
     public function scopeOccupied(\Illuminate\Database\Eloquent\Builder $query): void
     {
-        $query->where('status', RoomStatus::Occupied);
+        $query->where('status', RoomStatus::Occupied->value);
+    }
+    
+    protected static function booted(): void
+    {
+        static::deleting(function (Room $room): void {
+            $room->loadMissing('images');
+
+            foreach ($room->images as $image) {
+                if ($image->image_path) {
+                    Storage::disk('public')->delete($image->image_path);
+                }
+            }
+        });
     }
 }

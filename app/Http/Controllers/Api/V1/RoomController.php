@@ -16,6 +16,9 @@ use App\Models\Room;
 use App\Models\RoomPriceHistory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class RoomController extends Controller
 {
@@ -28,14 +31,15 @@ class RoomController extends Controller
         // Kiểm tra khu nhà có thuộc chủ trọ này không
         $property = Property::where('user_id', $request->user()->id)->findOrFail($propertyId);
 
-        $rooms = Room::where('property_id', $property->id)
+        $rooms = Room::with(['images' => fn($query) => $query->orderBy('sort_order')])
+            ->where('property_id', $property->id)
             ->when(
                 $request->search,
-                fn ($q) => $q->where('name', 'like', "%{$request->search}%")
+                fn($q) => $q->where('name', 'like', "%{$request->search}%")
             )
             ->when(
                 $request->status,
-                fn ($q) => $q->where('status', $request->status)
+                fn($q) => $q->where('status', $request->status)
             )
             ->latest()
             ->paginate($request->integer('per_page', 15));
@@ -49,8 +53,11 @@ class RoomController extends Controller
      */
     public function show(Request $request, int $id): RoomResource
     {
-        $room = Room::with('property')
-            ->whereHas('property', fn ($q) => $q->where('user_id', $request->user()->id))
+        $room = Room::with([
+            'property',
+            'images' => fn($query) => $query->orderBy('sort_order'),
+        ])
+            ->whereHas('property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
         return new RoomResource($room);
@@ -62,37 +69,74 @@ class RoomController extends Controller
      */
     public function store(StoreRoomRequest $request, int $propertyId): JsonResponse
     {
-        // Kiểm tra khu nhà có thuộc chủ trọ này không
         $property = Property::where('user_id', $request->user()->id)->findOrFail($propertyId);
 
-        $data             = $request->validated();
-        $data['property_id'] = $property->id;
-        $data['status']      = RoomStatus::Available->value;
+        $storedPaths = [];
 
-        $room = Room::create($data);
+        try {
+            DB::beginTransaction();
 
-        // Ghi lịch sử giá ban đầu nếu giá > 0
-        if ($room->current_price > 0) {
-            RoomPriceHistory::create([
-                'room_id'        => $room->id,
-                'user_id'        => $request->user()->id,
-                'old_price'      => 0,
-                'new_price'      => $room->current_price,
-                'effective_date' => now()->toDateString(),
-                'note'           => 'Giá khởi tạo khi tạo phòng.',
-            ]);
+            $data = $request->validated();
+
+            $images = $request->file('images', []);
+            $coverImageIndex = (int) ($data['cover_image_index'] ?? 0);
+
+            if ($coverImageIndex < 0 || $coverImageIndex >= count($images)) {
+                $coverImageIndex = 0;
+            }
+
+            unset($data['images'], $data['cover_image_index']);
+
+            $data['property_id'] = $property->id;
+            $data['status'] = $data['status'] ?? RoomStatus::Available->value;
+
+            $room = Room::create($data);
+
+            if ($room->current_price > 0) {
+                RoomPriceHistory::create([
+                    'room_id' => $room->id,
+                    'user_id' => $request->user()->id,
+                    'old_price' => 0,
+                    'new_price' => $room->current_price,
+                    'effective_date' => now()->toDateString(),
+                    'note' => 'Giá khởi tạo khi tạo phòng.',
+                ]);
+            }
+
+            foreach ($images as $index => $image) {
+                $path = $image->store("rooms/{$room->id}", 'public');
+
+                $storedPaths[] = $path;
+
+                $room->images()->create([
+                    'image_path' => $path,
+                    'is_cover' => $index === $coverImageIndex,
+                    'sort_order' => $index,
+                ]);
+            }
+
+            DB::commit();
+
+            $room->load('images');
+
+            return (new RoomResource($room))->response()->setStatusCode(201);
+        } catch (Throwable $exception) {
+            DB::rollBack();
+
+            foreach ($storedPaths as $path) {
+                Storage::disk('public')->delete($path);
+            }
+
+            throw $exception;
         }
-
-        return (new RoomResource($room))->response()->setStatusCode(201);
     }
-
     /**
      * Cập nhật thông tin phòng.
      * Nếu thay đổi current_price → tự động ghi room_price_histories.
      */
     public function update(UpdateRoomRequest $request, int $id): RoomResource
     {
-        $room = Room::whereHas('property', fn ($q) => $q->where('user_id', $request->user()->id))
+        $room = Room::whereHas('property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
         $validated   = $request->validated();
@@ -102,17 +146,18 @@ class RoomController extends Controller
         $room->update($validated);
 
         // Tự động ghi lịch sử khi giá thay đổi
-        if ($newPrice !== null && $newPrice !== $oldPrice) {
+        if ($newPrice !== null && (int) $newPrice !== (int) $oldPrice) {
             RoomPriceHistory::create([
-                'room_id'        => $room->id,
-                'user_id'        => $request->user()->id,
-                'old_price'      => $oldPrice,
-                'new_price'      => $newPrice,
+                'room_id' => $room->id,
+                'user_id' => $request->user()->id,
+                'old_price' => (int) $oldPrice,
+                'new_price' => (int) $newPrice,
                 'effective_date' => now()->toDateString(),
-                'note'           => $request->input('price_note'),
+                'note' => $request->input('price_note'),
             ]);
         }
 
+        $room->load(['images' => fn($query) => $query->orderBy('sort_order')]);
         return new RoomResource($room);
     }
 
@@ -121,7 +166,7 @@ class RoomController extends Controller
      */
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $room = Room::whereHas('property', fn ($q) => $q->where('user_id', $request->user()->id))
+        $room = Room::whereHas('property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
         if ($room->status !== RoomStatus::Available) {
@@ -140,7 +185,7 @@ class RoomController extends Controller
      */
     public function updateStatus(UpdateRoomStatusRequest $request, int $id): RoomResource
     {
-        $room = Room::whereHas('property', fn ($q) => $q->where('user_id', $request->user()->id))
+        $room = Room::whereHas('property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
         // Không cho chuyển status của phòng đang có hợp đồng active
@@ -149,6 +194,8 @@ class RoomController extends Controller
         }
 
         $room->update(['status' => $request->status]);
+
+        $room->load(['images' => fn($query) => $query->orderBy('sort_order')]);
 
         return new RoomResource($room);
     }
