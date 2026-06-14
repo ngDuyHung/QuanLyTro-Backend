@@ -7,11 +7,27 @@ namespace App\Http\Resources\Property;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-
 class PropertyResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $totalRooms = (int) ($this->rooms_count ?? 0);
+        $availableRooms = (int) ($this->available_rooms_count ?? 0);
+        $occupiedRooms = (int) ($this->occupied_rooms_count ?? 0);
+        $maintenanceRooms = (int) ($this->maintenance_rooms_count ?? 0);
+
+        $occupancyRate = $totalRooms > 0
+            ? round(($occupiedRooms / $totalRooms) * 100)
+            : 0;
+
+        $availableRate = $totalRooms > 0
+            ? round(($availableRooms / $totalRooms) * 100)
+            : 0;
+
+        $maintenanceRate = $totalRooms > 0
+            ? round(($maintenanceRooms / $totalRooms) * 100)
+            : 0;
+
         return [
             'id' => $this->id,
 
@@ -38,7 +54,29 @@ class PropertyResource extends JsonResource
 
             'description' => $this->description,
 
-            'total_rooms' => $this->rooms_count ?? 0,
+            'total_rooms' => $totalRooms,
+            'available_rooms' => $availableRooms,
+            'occupied_rooms' => $occupiedRooms,
+            'maintenance_rooms' => $maintenanceRooms,
+
+            'occupancy_rate' => $occupancyRate,
+            'available_rate' => $availableRate,
+            'maintenance_rate' => $maintenanceRate,
+
+            'remaining_rooms_to_create' => max(
+                ((int) ($this->expected_rooms_count ?? 0)) - $totalRooms,
+                0
+            ),
+
+            'room_stats' => [
+                'total' => $totalRooms,
+                'available' => $availableRooms,
+                'occupied' => $occupiedRooms,
+                'maintenance' => $maintenanceRooms,
+                'occupancy_rate' => $occupancyRate,
+                'available_rate' => $availableRate,
+                'maintenance_rate' => $maintenanceRate,
+            ],
 
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),

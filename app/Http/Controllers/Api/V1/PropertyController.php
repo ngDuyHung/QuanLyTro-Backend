@@ -22,14 +22,17 @@ class PropertyController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $properties = Property::where('user_id', $request->user()->id)
-            ->withCount('rooms')
-            ->when(
-                $request->search,
-                fn($q) =>
-                $q->where('name', 'like', "%{$request->search}%")
-                    ->orWhere('address', 'like', "%{$request->search}%")
-            )
+        $properties = $this->propertyQueryWithRoomStats($request)
+            ->when($request->filled('search'), function ($query) use ($request) {
+                $search = trim((string) $request->search);
+
+                $query->where(function ($subQuery) use ($search) {
+                    $subQuery
+                        ->where('name', 'like', "%{$search}%")
+                        ->orWhere('code', 'like', "%{$search}%")
+                        ->orWhere('address', 'like', "%{$search}%");
+                });
+            })
             ->latest()
             ->paginate($request->integer('per_page', 15));
 
@@ -38,8 +41,7 @@ class PropertyController extends Controller
 
     public function show(Request $request, int $id): PropertyResource
     {
-        $property = Property::where('user_id', $request->user()->id)
-            ->withCount('rooms')
+        $property = $this->propertyQueryWithRoomStats($request)
             ->findOrFail($id);
 
         return new PropertyResource($property);
@@ -151,5 +153,23 @@ class PropertyController extends Controller
         return response()->json([
             'message' => 'Xóa khu nhà thành công.',
         ]);
+    }
+
+    //hàm truy vấn khu nhà kèm thống kê số phòng theo trạng thái
+    private function propertyQueryWithRoomStats(Request $request)
+    {
+        return Property::where('user_id', $request->user()->id)
+            ->withCount([
+                'rooms',
+
+                'rooms as available_rooms_count' => fn($query) =>
+                $query->where('status', 'available'),
+
+                'rooms as occupied_rooms_count' => fn($query) =>
+                $query->where('status', 'occupied'),
+
+                'rooms as maintenance_rooms_count' => fn($query) =>
+                $query->where('status', 'maintenance'),
+            ]);
     }
 }
