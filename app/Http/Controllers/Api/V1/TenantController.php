@@ -14,19 +14,24 @@ use App\Models\Tenant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-
+use App\Services\TenantService;
+use App\Http\Requests\Tenant\StoreTenantRequest;
 class TenantController extends Controller
 {
+
+    public function __construct(
+        private readonly TenantService $tenantService
+    ) {}
     /**
      * Lấy danh sách khách thuê (search tên/SĐT/CCCD, phân trang).
      * Ownership check: qua hợp đồng -> phòng -> khu nhà.
      */
     public function index(Request $request): JsonResponse
     {
-        $tenants = Tenant::whereHas('leases.room.property', fn ($q) => $q->where('user_id', $request->user()->id))
+        $tenants = Tenant::whereHas('leases.room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->when(
                 $request->search,
-                fn ($q) => $q->where(function ($sub) use ($request): void {
+                fn($q) => $q->where(function ($sub) use ($request): void {
                     $keyword = "%{$request->search}%";
                     $sub->where('full_name', 'like', $keyword)
                         ->orWhere('phone', 'like', $keyword)
@@ -46,10 +51,10 @@ class TenantController extends Controller
     public function show(Request $request, int $id): JsonResponse
     {
         $tenant = Tenant::with([
-                'leases.room:id,name,property_id',
-                'leases.room.property:id,name',
-            ])
-            ->whereHas('leases.room.property', fn ($q) => $q->where('user_id', $request->user()->id))
+            'leases.room:id,name,property_id',
+            'leases.room.property:id,name',
+        ])
+            ->whereHas('leases.room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
         return (new TenantResource($tenant))->response();
@@ -62,7 +67,7 @@ class TenantController extends Controller
      */
     public function update(UpdateTenantRequest $request, int $id): JsonResponse
     {
-        $tenant = Tenant::whereHas('leases.room.property', fn ($q) => $q->where('user_id', $request->user()->id))
+        $tenant = Tenant::whereHas('leases.room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
         $data = $request->validated();
@@ -100,7 +105,7 @@ class TenantController extends Controller
      */
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $tenant = Tenant::whereHas('leases.room.property', fn ($q) => $q->where('user_id', $request->user()->id))
+        $tenant = Tenant::whereHas('leases.room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
         // Kiểm tra không còn hợp đồng đang active
@@ -114,5 +119,47 @@ class TenantController extends Controller
         $tenant->delete();
 
         return response()->json(['message' => 'Xóa khách thuê thành công.']);
+    }
+
+
+    public function store(StoreTenantRequest $request): JsonResponse
+    {
+        $tenant = $this->tenantService->createTenant($request->validated());
+
+        return response()->json([
+            'message' => 'Thêm khách thuê thành công.',
+            'data' => [
+                'id' => $tenant->id,
+
+                'name' => $tenant->full_name,
+                'full_name' => $tenant->full_name,
+
+                'phone' => $tenant->phone,
+                'email' => $tenant->email,
+
+                'cccd' => $tenant->id_card_number,
+                'id_card_number' => $tenant->id_card_number,
+
+                'id_card_front_image' => $tenant->id_card_front_image
+                    ? asset('storage/' . ltrim($tenant->id_card_front_image, '/'))
+                    : null,
+
+                'id_card_back_image' => $tenant->id_card_back_image
+                    ? asset('storage/' . ltrim($tenant->id_card_back_image, '/'))
+                    : null,
+
+                // Tạm thời để TenantTable hiện được.
+                // Sau này phần này sẽ lấy từ leases / lease_members.
+                'room' => 'Chưa gắn phòng',
+                'area' => null,
+                'contractCode' => null,
+                'contractDuration' => null,
+                'role' => 'representative',
+                'status' => 'active',
+
+                'created_at' => $tenant->created_at?->toISOString(),
+                'updated_at' => $tenant->updated_at?->toISOString(),
+            ],
+        ], 201);
     }
 }

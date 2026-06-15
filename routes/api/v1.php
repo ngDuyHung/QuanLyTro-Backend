@@ -32,7 +32,6 @@ Route::middleware('throttle:auth')->group(function (): void {
 
     Route::post('auth/zalo/login', [AuthController::class, 'zaloLogin'])
         ->name('auth.zalo.login');
-
 });
 
 // ── Authenticated routes ───────────────────────────────────────────────────
@@ -55,8 +54,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::patch('rooms/{room}/status', [RoomController::class, 'updateStatus'])->name('rooms.status');
 
     // ── Tenants — chỉ xem/sửa/xóa (tạo mới qua POST /leases) ───────────────
+    Route::post('tenants', [TenantController::class, 'store'])->name('tenants.store');
     Route::apiResource('tenants', TenantController::class)->except(['store']);
-
     // ── Leases (Hợp đồng thuê) ────────────────────────────────────────────
     Route::get('leases',                         [LeaseController::class, 'index'])->name('leases.index');
     Route::get('leases/{lease}',                 [LeaseController::class, 'show'])->name('leases.show');
