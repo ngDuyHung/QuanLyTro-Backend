@@ -16,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Services\TenantService;
 use App\Http\Requests\Tenant\StoreTenantRequest;
+
 class TenantController extends Controller
 {
 
@@ -28,22 +29,40 @@ class TenantController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $tenants = Tenant::whereHas('leases.room.property', fn($q) => $q->where('user_id', $request->user()->id))
-            ->when(
-                $request->search,
-                fn($q) => $q->where(function ($sub) use ($request): void {
-                    $keyword = "%{$request->search}%";
+        $tenants = Tenant::with([
+            'currentResidence.room.property',
+            'currentResidence.lease',
+        ])
+            ->whereHas(
+                'roomResidents.room.property',
+                fn($query) => $query->where('user_id', $request->user()->id)
+            )
+            ->when($request->filled('search'), function ($query) use ($request): void {
+                $keyword = '%' . trim((string) $request->search) . '%';
+
+                $query->where(function ($sub) use ($keyword): void {
                     $sub->where('full_name', 'like', $keyword)
                         ->orWhere('phone', 'like', $keyword)
                         ->orWhere('id_card_number', 'like', $keyword);
-                })
-            )
+                });
+            })
+            ->when($request->filled('room_id'), function ($query) use ($request): void {
+                $query->whereHas(
+                    'roomResidents',
+                    fn($sub) => $sub->where('room_id', $request->integer('room_id'))
+                );
+            })
+            ->when($request->filled('status'), function ($query) use ($request): void {
+                $query->whereHas(
+                    'roomResidents',
+                    fn($sub) => $sub->where('status', $request->status)
+                );
+            })
             ->latest()
             ->paginate($request->integer('per_page', 15));
 
         return TenantResource::collection($tenants)->response();
     }
-
     /**
      * Xem chi tiết một khách thuê (kèm danh sách hợp đồng).
      * Ownership check: qua hợp đồng -> phòng -> khu nhà.
@@ -51,10 +70,17 @@ class TenantController extends Controller
     public function show(Request $request, int $id): JsonResponse
     {
         $tenant = Tenant::with([
-            'leases.room:id,name,property_id',
-            'leases.room.property:id,name',
+            'roomResidents.room.property',
+            'roomResidents.lease',
+            'currentResidence.room.property',
+            'currentResidence.lease',
+            'leases.room.property',
+            'leaseMembers.lease.room.property',
         ])
-            ->whereHas('leases.room.property', fn($q) => $q->where('user_id', $request->user()->id))
+            ->whereHas(
+                'roomResidents.room.property',
+                fn($query) => $query->where('user_id', $request->user()->id)
+            )
             ->findOrFail($id);
 
         return (new TenantResource($tenant))->response();
@@ -67,8 +93,10 @@ class TenantController extends Controller
      */
     public function update(UpdateTenantRequest $request, int $id): JsonResponse
     {
-        $tenant = Tenant::whereHas('leases.room.property', fn($q) => $q->where('user_id', $request->user()->id))
-            ->findOrFail($id);
+        $tenant = Tenant::whereHas(
+            'roomResidents.room.property',
+            fn($query) => $query->where('user_id', $request->user()->id)
+        )->findOrFail($id);
 
         $data = $request->validated();
         unset($data['id_card_front_image'], $data['id_card_back_image']);
@@ -105,15 +133,19 @@ class TenantController extends Controller
      */
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $tenant = Tenant::whereHas('leases.room.property', fn($q) => $q->where('user_id', $request->user()->id))
-            ->findOrFail($id);
+        $tenant = Tenant::whereHas(
+            'roomResidents.room.property',
+            fn($query) => $query->where('user_id', $request->user()->id)
+        )->findOrFail($id);
 
-        // Kiểm tra không còn hợp đồng đang active
-        if ($tenant->leases()->where('status', 'active')->exists()) {
-            throw new BusinessException('Không thể xóa khách thuê đang có hợp đồng thuê phòng.');
+        if (
+            $tenant->roomResidents()
+            ->whereIn('status', ['pending', 'active'])
+            ->exists()
+        ) {
+            throw new BusinessException('Không thể xóa khách thuê đang còn cư trú. Vui lòng thực hiện rời phòng trước.');
         }
 
-        // Xóa toàn bộ thư mục ảnh CCCD của khách thuê
         Storage::disk('public')->deleteDirectory("tenants/{$tenant->id}");
 
         $tenant->delete();
@@ -124,42 +156,36 @@ class TenantController extends Controller
 
     public function store(StoreTenantRequest $request): JsonResponse
     {
-        $tenant = $this->tenantService->createTenant($request->validated());
+        $tenant = $this->tenantService->createTenant(
+            data: $request->validated(),
+            ownerId: $request->user()->id
+        );
 
-        return response()->json([
-            'message' => 'Thêm khách thuê thành công.',
-            'data' => [
-                'id' => $tenant->id,
+        return (new TenantResource($tenant))
+            ->additional(['message' => 'Thêm khách thuê thành công.'])
+            ->response()
+            ->setStatusCode(201);
+    }
 
-                'name' => $tenant->full_name,
-                'full_name' => $tenant->full_name,
+    public function leave(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate([
+            'move_out_date' => ['nullable', 'date'],
+        ]);
 
-                'phone' => $tenant->phone,
-                'email' => $tenant->email,
+        $tenant = Tenant::whereHas(
+            'roomResidents.room.property',
+            fn($query) => $query->where('user_id', $request->user()->id)
+        )->findOrFail($id);
 
-                'cccd' => $tenant->id_card_number,
-                'id_card_number' => $tenant->id_card_number,
+        $tenant = $this->tenantService->markTenantLeft(
+            tenant: $tenant,
+            ownerId: $request->user()->id,
+            moveOutDate: $data['move_out_date'] ?? null
+        );
 
-                'id_card_front_image' => $tenant->id_card_front_image
-                    ? asset('storage/' . ltrim($tenant->id_card_front_image, '/'))
-                    : null,
-
-                'id_card_back_image' => $tenant->id_card_back_image
-                    ? asset('storage/' . ltrim($tenant->id_card_back_image, '/'))
-                    : null,
-
-                // Tạm thời để TenantTable hiện được.
-                // Sau này phần này sẽ lấy từ leases / lease_members.
-                'room' => 'Chưa gắn phòng',
-                'area' => null,
-                'contractCode' => null,
-                'contractDuration' => null,
-                'role' => 'representative',
-                'status' => 'active',
-
-                'created_at' => $tenant->created_at?->toISOString(),
-                'updated_at' => $tenant->updated_at?->toISOString(),
-            ],
-        ], 201);
+        return (new TenantResource($tenant))
+            ->additional(['message' => 'Đã ghi nhận khách thuê rời phòng.'])
+            ->response();
     }
 }

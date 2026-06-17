@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Room extends Model
 {
@@ -90,7 +91,7 @@ class Room extends Model
     {
         $query->where('status', RoomStatus::Occupied->value);
     }
-    
+
     protected static function booted(): void
     {
         static::deleting(function (Room $room): void {
@@ -102,5 +103,23 @@ class Room extends Model
                 }
             }
         });
+    }
+
+    public function residents(): HasMany
+    {
+        return $this->hasMany(RoomResident::class);
+    }
+
+    public function currentResidents(): HasMany
+    {
+        return $this->hasMany(RoomResident::class)
+            ->where('status', 'active');
+    }
+
+    public function activeLease(): HasOne
+    {
+        return $this->hasOne(Lease::class)
+            ->where('status', 'active')
+            ->latestOfMany();
     }
 }

@@ -86,4 +86,10 @@ class Lease extends Model
     {
         $query->where('status', LeaseStatus::Active);
     }
+
+ 
+    public function roomResidents(): HasMany
+    {
+        return $this->hasMany(RoomResident::class);
+    }
 }

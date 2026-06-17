@@ -55,7 +55,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     // ── Tenants — chỉ xem/sửa/xóa (tạo mới qua POST /leases) ───────────────
     Route::post('tenants', [TenantController::class, 'store'])->name('tenants.store');
+    Route::patch('tenants/{tenant}/leave', [TenantController::class, 'leave'])
+        ->name('tenants.leave');
     Route::apiResource('tenants', TenantController::class)->except(['store']);
+
     // ── Leases (Hợp đồng thuê) ────────────────────────────────────────────
     Route::get('leases',                         [LeaseController::class, 'index'])->name('leases.index');
     Route::get('leases/{lease}',                 [LeaseController::class, 'show'])->name('leases.show');
