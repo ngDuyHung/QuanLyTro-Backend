@@ -16,6 +16,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Services\TenantService;
 use App\Http\Requests\Tenant\StoreTenantRequest;
+use App\Models\Lease;
+use App\Models\Room;
+use Illuminate\Support\Facades\DB;
+use Throwable;
 
 class TenantController extends Controller
 {
@@ -154,17 +158,59 @@ class TenantController extends Controller
     }
 
 
+
+    /**
+     * Thêm khách thuê vào một phòng đang có hợp đồng active.
+     */
     public function store(StoreTenantRequest $request): JsonResponse
     {
-        $tenant = $this->tenantService->createTenant(
-            data: $request->validated(),
-            ownerId: $request->user()->id
-        );
+        $data = $request->validated();
 
-        return (new TenantResource($tenant))
-            ->additional(['message' => 'Thêm khách thuê thành công.'])
-            ->response()
-            ->setStatusCode(201);
+        $createdTenantId = null;
+
+        try {
+            $tenant = DB::transaction(function () use ($data, $request, &$createdTenantId): Tenant {
+                $room = Room::with(['property', 'activeLease'])
+                    ->whereHas('property', fn($query) => $query->where('user_id', $request->user()->id))
+                    ->findOrFail($data['room_id']);
+
+                $lease = $room->activeLease;
+
+                if (!$lease) {
+                    throw new BusinessException('Phòng này chưa có hợp đồng đang hiệu lực. Vui lòng tạo hợp đồng trước khi thêm khách thuê.');
+                }
+
+                $tenant = $this->tenantService->createProfile($data);
+                $createdTenantId = $tenant->id;
+
+                $this->tenantService->createMemberResidence(
+                    tenant: $tenant,
+                    lease: $lease,
+                    data: [
+                        'relationship' => $data['relationship'] ?? 'other',
+                        'move_in_date' => $data['move_in_date'] ?? now()->toDateString(),
+                        'note' => $data['note'] ?? null,
+                    ]
+                );
+
+                return $tenant->refresh()->load([
+                    'currentResidence.room.property',
+                    'currentResidence.lease',
+                    'roomResidents.room.property',
+                ]);
+            });
+
+            return (new TenantResource($tenant))
+                ->additional(['message' => 'Thêm khách thuê vào phòng thành công.'])
+                ->response()
+                ->setStatusCode(201);
+        } catch (Throwable $exception) {
+            if ($createdTenantId) {
+                $this->tenantService->deleteTenantFiles($createdTenantId);
+            }
+
+            throw $exception;
+        }
     }
 
     public function leave(Request $request, int $id): JsonResponse

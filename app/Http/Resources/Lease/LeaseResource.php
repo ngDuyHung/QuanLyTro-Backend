@@ -26,7 +26,7 @@ class LeaseResource extends JsonResource
             'updated_at'           => $this->updated_at?->toISOString(),
 
             // Relationship — chỉ hiện khi đã được load
-            'room' => $this->whenLoaded('room', fn () => [
+            'room' => $this->whenLoaded('room', fn() => [
                 'id'       => $this->room->id,
                 'name'     => $this->room->name,
                 'area'     => $this->room->area ? (float) $this->room->area : null,
@@ -40,7 +40,7 @@ class LeaseResource extends JsonResource
                 ] : null,
             ]),
 
-            'tenant' => $this->whenLoaded('tenant', fn () => [
+            'tenant' => $this->whenLoaded('tenant', fn() => [
                 'id'             => $this->tenant->id,
                 'full_name'      => $this->tenant->full_name,
                 'phone'          => $this->tenant->phone,
@@ -48,20 +48,30 @@ class LeaseResource extends JsonResource
                 'id_card_number' => $this->tenant->id_card_number,
             ]),
 
-            'members' => $this->whenLoaded('members', fn () =>
-                $this->members->map(fn ($member) => [
-                    'id'           => $member->id,
-                    'full_name'    => $member->tenant->full_name,
-                    'phone'        => $member->tenant->phone,
-                    'relationship' => $member->relationship?->value,
-                    'relationship_label' => $member->relationship?->label(),
-                    'joined_at'    => $member->joined_at?->toDateString(),
-                    'left_at'      => $member->left_at?->toDateString(),
+            'members' => $this->whenLoaded(
+                'members',
+                fn() =>
+                $this->members->map(fn($member) => [
+                    'id' => $member->id,
+                    'tenant_id' => $member->tenant_id,
+                    'full_name' => $member->tenant?->full_name,
+                    'phone' => $member->tenant?->phone,
+                    'relationship' => is_object($member->relationship)
+                        ? $member->relationship->value
+                        : $member->relationship,
+                    'relationship_label' => is_object($member->relationship) && method_exists($member->relationship, 'label')
+                        ? $member->relationship->label()
+                        : null,
+                    'move_in_date' => $member->move_in_date?->toDateString(),
+                    'move_out_date' => $member->move_out_date?->toDateString(),
+                    'note' => $member->note,
                 ])
             ),
 
-            'invoices' => $this->whenLoaded('invoices', fn () =>
-                $this->invoices->map(fn ($invoice) => [
+            'invoices' => $this->whenLoaded(
+                'invoices',
+                fn() =>
+                $this->invoices->map(fn($invoice) => [
                     'id'            => $invoice->id,
                     'invoice_code'  => $invoice->invoice_code,
                     'status'        => $invoice->status?->value,

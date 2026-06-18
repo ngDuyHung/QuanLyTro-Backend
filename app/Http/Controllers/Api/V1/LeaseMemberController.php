@@ -61,7 +61,7 @@ class LeaseMemberController extends Controller
             if ($request->filled('tenant_id')) {
                 $tenantId = $request->integer('tenant_id');
             } else {
-                $tenant = $this->tenantService->createTenant($request->validated()['tenant']);
+                $tenant = $this->tenantService->createTenant($request->input('tenant'), $request->user()->id);
                 $tenantId = $tenant->id;
             }
 
