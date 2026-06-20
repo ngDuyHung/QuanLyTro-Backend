@@ -11,6 +11,7 @@ use App\Http\Requests\LeaseMember\UpdateLeaseMemberRequest;
 use App\Http\Resources\LeaseMember\LeaseMemberResource;
 use App\Models\Lease;
 use App\Models\LeaseMember;
+use App\Models\Tenant;
 use App\Services\TenantService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,7 +29,7 @@ class LeaseMemberController extends Controller
      */
     public function index(Request $request, int $leaseId): JsonResponse
     {
-        $lease = Lease::whereHas('room.property', fn ($q) => $q->where('user_id', $request->user()->id))
+        $lease = Lease::whereHas('room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($leaseId);
 
         $members = $lease->members()
@@ -38,63 +39,72 @@ class LeaseMemberController extends Controller
         return LeaseMemberResource::collection($members)->response();
     }
 
-    /**
-     * Thêm thành viên ở cùng vào hợp đồng.
-     * Hỗ trợ 2 cách:
-     *   - Truyền tenant_id: liên kết với khách thuê đã có trong hệ thống.
-     *   - Truyền object tenant: tạo khách thuê mới rồi liên kết.
-     * Ownership check: qua hợp đồng -> phòng -> khu nhà.
-     */
     public function store(StoreLeaseMemberRequest $request, int $leaseId): JsonResponse
     {
-        $lease = Lease::with('room')
-            ->whereHas('room.property', fn ($q) => $q->where('user_id', $request->user()->id))
+        $lease = Lease::with(['room', 'members'])
+            ->whereHas('room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($leaseId);
 
-        // Chỉ cho phép thêm thành viên vào hợp đồng đang active
         if (!$lease->status->isActive()) {
             throw new BusinessException('Chỉ có thể thêm thành viên vào hợp đồng đang có hiệu lực.');
         }
 
         return DB::transaction(function () use ($request, $lease): JsonResponse {
-            // Xác định tenant_id: dùng có sẵn hoặc tạo mới
-            if ($request->filled('tenant_id')) {
-                $tenantId = $request->integer('tenant_id');
-            } else {
-                $tenant = $this->tenantService->createTenant($request->input('tenant'), $request->user()->id);
-                $tenantId = $tenant->id;
-            }
-
-            // Kiểm tra tenant không phải người đứng tên hợp đồng
-            if ($tenantId === $lease->tenant_id) {
-                throw new BusinessException('Khách thuê này đã là người đứng tên hợp đồng, không thể thêm vào danh sách thành viên.');
-            }
-
-            // Kiểm tra tenant chưa có trong danh sách thành viên của hợp đồng này
-            if ($lease->members()->where('tenant_id', $tenantId)->exists()) {
-                throw new BusinessException('Khách thuê này đã có trong danh sách thành viên của hợp đồng.');
-            }
-
-            // Kiểm tra sức chứa tối đa của phòng (nếu có giới hạn)
-            if ($lease->room->max_occupants > 0) {
-                // Đếm: người đứng tên (1) + số thành viên hiện tại
+            /*
+        |--------------------------------------------------------------------------
+        | 1. Kiểm tra sức chứa trước khi tạo tenant mới
+        |--------------------------------------------------------------------------
+        | currentCount = 1 người đại diện + số người ở ghép hiện tại
+        | Nếu currentCount >= max_occupants thì không cho thêm nữa.
+        */
+            if ((int) $lease->room->max_occupants > 0) {
                 $currentCount = $lease->members()->count() + 1;
-                if ($currentCount >= $lease->room->max_occupants) {
+
+                if ($currentCount >= (int) $lease->room->max_occupants) {
                     throw new BusinessException(
                         "Phòng này chỉ chứa tối đa {$lease->room->max_occupants} người. Hiện đang có {$currentCount} người."
                     );
                 }
             }
 
-            $member = LeaseMember::create([
-                'lease_id'     => $lease->id,
-                'tenant_id'    => $tenantId,
-                'relationship' => $request->input('relationship'),
-                'note'         => $request->input('note'),
-                'move_in_date' => $request->input('move_in_date'),
-            ]);
 
-            return (new LeaseMemberResource($member->load('tenant')))->response()->setStatusCode(201);
+            //2. Lấy tenant có sẵn hoặc tạo tenant mới
+            if ($request->filled('tenant_id')) {
+                $tenant = Tenant::findOrFail($request->integer('tenant_id'));
+            } else {
+                $tenant = $this->tenantService->createProfile($request->input('tenant'));
+            }
+
+            //3. Không cho thêm chính người đại diện vào danh sách ở ghép
+            if ((int) $tenant->id === (int) $lease->tenant_id) {
+                throw new BusinessException('Khách thuê này đã là người đứng tên hợp đồng, không thể thêm vào danh sách thành viên.');
+            }
+
+            //4. Không cho trùng thành viên trong cùng hợp đồng
+
+            if ($lease->members()->where('tenant_id', $tenant->id)->exists()) {
+                throw new BusinessException('Khách thuê này đã có trong danh sách thành viên của hợp đồng.');
+            }
+
+            //5. Tạo cư trú + lease_members bằng TenantService
+            $this->tenantService->createMemberResidence(
+                tenant: $tenant,
+                lease: $lease,
+                data: [
+                    'relationship' => $request->input('relationship'),
+                    'note' => $request->input('note'),
+                    'move_in_date' => $request->input('move_in_date'),
+                ]
+            );
+
+            $member = LeaseMember::with('tenant')
+                ->where('lease_id', $lease->id)
+                ->where('tenant_id', $tenant->id)
+                ->firstOrFail();
+
+            return (new LeaseMemberResource($member))
+                ->response()
+                ->setStatusCode(201);
         });
     }
 
@@ -106,7 +116,7 @@ class LeaseMemberController extends Controller
     {
         $member = LeaseMember::whereHas(
             'lease.room.property',
-            fn ($q) => $q->where('user_id', $request->user()->id)
+            fn($q) => $q->where('user_id', $request->user()->id)
         )->findOrFail($id);
 
         $member->update($request->validated());
@@ -123,7 +133,7 @@ class LeaseMemberController extends Controller
     {
         $member = LeaseMember::whereHas(
             'lease.room.property',
-            fn ($q) => $q->where('user_id', $request->user()->id)
+            fn($q) => $q->where('user_id', $request->user()->id)
         )->findOrFail($id);
 
         $member->delete();

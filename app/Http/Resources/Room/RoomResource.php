@@ -62,6 +62,71 @@ class RoomResource extends JsonResource
                     'sort_order' => $image->sort_order,
                 ])->values()
             ),
+
+            'current_occupants_count' => $this->whenLoaded(
+                'currentResidents',
+                fn() => $this->currentResidents->count()
+            ),
+
+            'representative' => $this->whenLoaded('currentResidents', function () {
+                $resident = $this->currentResidents
+                    ->firstWhere('role', 'representative');
+
+                if (!$resident || !$resident->tenant) {
+                    return null;
+                }
+
+                return [
+                    'resident_id' => $resident->id,
+                    'role' => $resident->role,
+                    'status' => $resident->status,
+                    'move_in_date' => $resident->move_in_date?->toDateString(),
+
+                    'tenant' => [
+                        'id' => $resident->tenant->id,
+                        'full_name' => $resident->tenant->full_name,
+                        'name' => $resident->tenant->full_name,
+                        'phone' => $resident->tenant->phone,
+                        'email' => $resident->tenant->email,
+                        'id_card_number' => $resident->tenant->id_card_number,
+                    ],
+                ];
+            }),
+
+            'current_residents' => $this->whenLoaded(
+                'currentResidents',
+                fn() => $this->currentResidents->map(fn($resident) => [
+                    'resident_id' => $resident->id,
+                    'role' => $resident->role,
+                    'status' => $resident->status,
+                    'move_in_date' => $resident->move_in_date?->toDateString(),
+                    'move_out_date' => $resident->move_out_date?->toDateString(),
+                    'note' => $resident->note,
+
+                    'tenant' => $resident->tenant ? [
+                        'id' => $resident->tenant->id,
+                        'full_name' => $resident->tenant->full_name,
+                        'name' => $resident->tenant->full_name,
+                        'phone' => $resident->tenant->phone,
+                        'email' => $resident->tenant->email,
+                        'id_card_number' => $resident->tenant->id_card_number,
+                    ] : null,
+                ])->values()
+            ),
+
+            'tenant_name' => $this->whenLoaded('currentResidents', function () {
+                $representative = $this->currentResidents
+                    ->firstWhere('role', 'representative');
+
+                return $representative?->tenant?->full_name;
+            }),
+
+            'tenant_phone' => $this->whenLoaded('currentResidents', function () {
+                $representative = $this->currentResidents
+                    ->firstWhere('role', 'representative');
+
+                return $representative?->tenant?->phone;
+            }),
         ];
     }
 }

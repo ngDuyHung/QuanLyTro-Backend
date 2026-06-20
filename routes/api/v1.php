@@ -8,9 +8,11 @@ use App\Http\Controllers\Api\V1\LeaseMemberController;
 use App\Http\Controllers\Api\V1\MeterReadingController;
 use App\Http\Controllers\Api\V1\PropertyController;
 use App\Http\Controllers\Api\V1\RoomController;
+use App\Http\Controllers\Api\V1\SePayTransactionController;
 use App\Http\Controllers\Api\V1\ServicePriceController;
 use App\Http\Controllers\Api\V1\TenantController;
-use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\Api\V1\FinancialTransactionController;
+use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Models\Room;
 use Illuminate\Support\Facades\Route;
 use Symfony\Component\Routing\Router;
@@ -92,8 +94,45 @@ Route::middleware('auth:sanctum')->group(function (): void {
     // ── Invoices (Hóa đơn) ───────────────────────────────────────────────
     Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index');
     Route::post('invoices', [InvoiceController::class, 'store'])->name('invoices.store');
-    Route::post('invoices/bulk-create', [InvoiceController::class, 'bulkCreate'])->name('invoices.bulk-create'); // Tạo hóa đơn hàng loạt cho tất cả hợp đồng thuê đang hoạt động
-    Route::get('invoices/{id}',             [InvoiceController::class, 'show'])->name('invoices.show');
-    Route::put('invoices/{id}',             [InvoiceController::class, 'update'])->name('invoices.update');
-    Route::delete('invoices/{id}',          [InvoiceController::class, 'destroy '])->name('invoices.destroy');
+    Route::post('invoices/bulk-create', [InvoiceController::class, 'bulkCreate'])->name('invoices.bulk-create');
+
+    Route::get('invoices/{id}', [InvoiceController::class, 'show'])->name('invoices.show');
+    Route::put('invoices/{id}', [InvoiceController::class, 'update'])->name('invoices.update');
+    Route::delete('invoices/{id}', [InvoiceController::class, 'destroy'])->name('invoices.destroy');
+
+    Route::post('invoices/{id}/issue', [InvoiceController::class, 'issue'])->name('invoices.issue');
+    Route::post('invoices/{id}/cancel', [InvoiceController::class, 'cancel'])->name('invoices.cancel');
+
+    // ── Financial Transactions (Thu chi) ─────────────────────────────────────
+    Route::get('financial-transactions', [FinancialTransactionController::class, 'index'])
+        ->name('financial-transactions.index');
+
+    Route::post('financial-transactions', [FinancialTransactionController::class, 'store'])
+        ->name('financial-transactions.store');
+
+    Route::get('financial-transactions/{id}', [FinancialTransactionController::class, 'show'])
+        ->name('financial-transactions.show');
+
+    Route::post('financial-transactions/{id}/cancel', [FinancialTransactionController::class, 'cancel'])
+        ->name('financial-transactions.cancel');
+
+    // Ghi nhận thanh toán hóa đơn
+    Route::post('invoices/{id}/receive-payment', [FinancialTransactionController::class, 'receiveInvoicePayment'])
+        ->name('invoices.receive-payment');
+
+    // ── SePay Transactions (Đối soát SePay) ─────────────────────────────────
+    Route::get('sepay-transactions', [SePayTransactionController::class, 'index'])
+        ->name('sepay-transactions.index');
+
+    Route::get('sepay-transactions/{id}', [SePayTransactionController::class, 'show'])
+        ->name('sepay-transactions.show');
+
+    Route::post('sepay-transactions/{id}/retry', [SePayTransactionController::class, 'retry'])
+        ->name('sepay-transactions.retry');
+
+    Route::post('sepay-transactions/{id}/match', [SePayTransactionController::class, 'match'])
+        ->name('sepay-transactions.match');
+
+    Route::post('sepay-transactions/{id}/ignore', [SePayTransactionController::class, 'ignore'])
+        ->name('sepay-transactions.ignore');
 });

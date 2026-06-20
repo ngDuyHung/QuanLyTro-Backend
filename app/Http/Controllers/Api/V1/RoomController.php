@@ -36,7 +36,15 @@ class RoomController extends Controller
         // Kiểm tra khu nhà có thuộc chủ trọ này không
         $property = Property::where('user_id', $request->user()->id)->findOrFail($propertyId);
 
-        $rooms = Room::with(['images' => fn($query) => $query->orderBy('sort_order')])
+        // Lấy danh sách phòng trong khu nhà, kèm ảnh và cư dân hiện tại
+        $rooms = Room::with([
+            'images' => fn($query) => $query->orderBy('sort_order'),
+
+            'currentResidents' => fn($query) => $query
+                ->with('tenant:id,full_name,phone,email,id_card_number')
+                ->orderByRaw("role = 'representative' desc")
+                ->orderBy('id'),
+        ])
             ->where('property_id', $property->id)
             ->when(
                 $request->search,
@@ -48,7 +56,6 @@ class RoomController extends Controller
             )
             ->latest()
             ->paginate($request->integer('per_page', 15));
-
         return RoomResource::collection($rooms)->response();
     }
 
@@ -102,6 +109,11 @@ class RoomController extends Controller
         $room = Room::with([
             'property',
             'images' => fn($query) => $query->orderBy('sort_order'),
+
+            'currentResidents' => fn($query) => $query
+                ->with('tenant:id,full_name,phone,email,id_card_number')
+                ->orderByRaw("role = 'representative' desc")
+                ->orderBy('id'),
         ])
             ->whereHas('property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
