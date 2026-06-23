@@ -38,6 +38,7 @@ class RoomController extends Controller
 
         // Lấy danh sách phòng trong khu nhà, kèm ảnh và cư dân hiện tại
         $rooms = Room::with([
+            'property',
             'images' => fn($query) => $query->orderBy('sort_order'),
 
             'currentResidents' => fn($query) => $query
@@ -65,6 +66,12 @@ class RoomController extends Controller
         $rooms = Room::with([
             'property',
             'images' => fn($query) => $query->orderBy('sort_order'),
+
+            // BỔ SUNG ĐOẠN NÀY ĐỂ EAGER LOAD NGƯỜI THUÊ (Fix lỗi N+1 và rỗng data)
+            'currentResidents' => fn($query) => $query
+                ->with('tenant:id,full_name,phone,email,id_card_number')
+                ->orderByRaw("role = 'representative' desc")
+                ->orderBy('id'),
         ])
             ->whereHas(
                 'property',

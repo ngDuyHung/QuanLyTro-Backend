@@ -62,12 +62,12 @@ class RoomResource extends JsonResource
                     'sort_order' => $image->sort_order,
                 ])->values()
             ),
-
+            // Số lượng người đang ở hiện tại
             'current_occupants_count' => $this->whenLoaded(
                 'currentResidents',
                 fn() => $this->currentResidents->count()
             ),
-
+            // Thông tin người đại diện (nếu có)
             'representative' => $this->whenLoaded('currentResidents', function () {
                 $resident = $this->currentResidents
                     ->firstWhere('role', 'representative');

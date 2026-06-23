@@ -116,6 +116,17 @@ class Room extends Model
             ->where('status', 'active');
     }
 
+    /**
+     * CHỈ lấy người đại diện hiện tại của phòng.
+     */
+    public function representative(): HasOne
+    {
+        return $this->hasOne(RoomResident::class)
+            ->where('role', 'representative')
+            ->where('status', 'active') // Đồng nhất với hàm currentResidents của bạn
+            ->latestOfMany();
+    }
+
     public function activeLease(): HasOne
     {
         return $this->hasOne(Lease::class)
