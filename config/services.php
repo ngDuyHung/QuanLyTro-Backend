@@ -34,11 +34,14 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
-    
+
     'zalo' => [
         'app_id'       => env('ZALO_APP_ID'),
         'app_secret'   => env('ZALO_APP_SECRET'),
         'redirect_uri' => env('ZALO_REDIRECT_URI'),
+    ],
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
     ],
 
 ];

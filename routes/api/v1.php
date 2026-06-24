@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\ServicePriceController;
 use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\FinancialTransactionController;
 use App\Http\Controllers\Api\V1\InvoiceController;
+use App\Http\Controllers\Api\V1\OcrController;
 use App\Models\Room;
 use Illuminate\Support\Facades\Route;
 use Symfony\Component\Routing\Router;
@@ -135,4 +136,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     Route::post('sepay-transactions/{id}/ignore', [SePayTransactionController::class, 'ignore'])
         ->name('sepay-transactions.ignore');
+
+
+    // ── Route OCR (Quét CCCD) ────────────────────────────────
+    Route::post('ocr/scan-id-card', [OcrController::class, 'scanIdCard'])->name('ocr.scan');
 });
