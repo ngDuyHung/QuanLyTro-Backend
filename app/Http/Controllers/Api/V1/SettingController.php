@@ -1,0 +1,63 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Setting\ExportLeasePdfRequest;
+use App\Http\Requests\Setting\SaveContractTemplateRequest;
+use App\Http\Resources\Setting\SettingResource;
+use App\Services\SettingService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class SettingController extends Controller
+{
+    public function __construct(
+        private readonly SettingService $settingService
+    ) {}
+
+    /**
+     * API: Lấy mẫu hợp đồng
+     */
+    public function getContractTemplate(Request $request): JsonResponse
+    {
+        $template = $this->settingService->getContractTemplate($request->user()->id);
+
+        // Trả về dữ liệu qua API Resource đúng chuẩn kiến trúc hệ thống
+        return (new SettingResource($template))
+            ->additional(['success' => true])
+            ->response();
+    }
+
+    /**
+     * API: Lưu mẫu hợp đồng
+     */
+    public function saveContractTemplate(SaveContractTemplateRequest $request): JsonResponse
+    {
+        $setting = $this->settingService->saveContractTemplate(
+            $request->user()->id,
+            $request->validated('template')
+        );
+
+        // Trả về dữ liệu mẫu mới lưu qua API Resource
+        return (new SettingResource($setting))
+            ->additional([
+                'success' => true,
+                'message' => 'Lưu mẫu hợp đồng thành công.'
+            ])
+            ->response();
+    }
+
+    /**
+     * API: Xuất file PDF
+     */
+    public function exportLeasePdf(ExportLeasePdfRequest $request, int $id)
+    {
+        // Chắc chắn dữ liệu đã hợp lệ 100% mới chạy xuống đây
+        $pdf = $this->settingService->generateLeasePdf($id, $request->user()->id);
+
+        return $pdf->download("Hop_dong_thue_phong_{$id}.pdf");
+    }
+}

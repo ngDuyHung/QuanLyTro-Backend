@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\FinancialTransactionController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\OcrController;
+use App\Http\Controllers\Api\V1\SettingController;
 use App\Models\Room;
 use Illuminate\Support\Facades\Route;
 use Symfony\Component\Routing\Router;
@@ -76,6 +77,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('leases/{leaseId}/members',   [LeaseMemberController::class, 'store'])->name('leases.members.store');
     Route::put('lease-members/{id}',          [LeaseMemberController::class, 'update'])->name('lease-members.update');
     Route::delete('lease-members/{id}',       [LeaseMemberController::class, 'destroy'])->name('lease-members.destroy');
+
+    // ── Settings (Mẫu hợp đồng) ────────────────────────────────────────────
+    Route::get('settings/contract-template', [SettingController::class, 'getContractTemplate']);
+    Route::post('settings/contract-template', [SettingController::class, 'saveContractTemplate']); // Dùng POST hay PUT đều được
+    Route::get('leases/{id}/export-pdf', [SettingController::class, 'exportLeasePdf']);
 
     // ── Service Prices (Giá dịch vụ) ───────────────────────────────────────
     Route::get('service-prices', [ServicePriceController::class, 'indexGlobal'])->name('service-prices.index-global'); // Danh sách giá mặc định (property_id = null)

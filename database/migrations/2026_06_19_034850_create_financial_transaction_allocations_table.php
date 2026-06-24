@@ -65,7 +65,8 @@ return new class extends Migration
              */
             $table->foreignId('financial_transaction_id')
                 ->comment('FK financial_transactions - khoản thu/chi được dùng để cấn vào hóa đơn')
-                ->constrained('financial_transactions')
+                // Thêm 'id' (tên cột đích) và 'fk_fta_trans_id' (tên khóa ngoại rút gọn)
+                ->constrained('financial_transactions', 'id', 'fk_fta_trans_id')
                 ->restrictOnDelete();
 
             /*
@@ -123,10 +124,10 @@ return new class extends Migration
              |
              */
             $table->enum('allocation_type', [
-                    'payment',
-                    'refund',
-                    'adjustment',
-                ])
+                'payment',
+                'refund',
+                'adjustment',
+            ])
                 ->default('payment')
                 ->comment('Loại cấn trừ: payment/refund/adjustment');
 
