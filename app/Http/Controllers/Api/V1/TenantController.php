@@ -131,9 +131,11 @@ class TenantController extends Controller
     }
 
     /**
-     * Xóa khách thuê (chỉ khi không có hợp đồng đang active).
+     * Xóa khách thuê.
      * Xóa cả thư mục ảnh CCCD trong storage.
      * Ownership check: qua hợp đồng -> phòng -> khu nhà.
+     * Chặn xóa nếu khách thuê đang còn cư trú hoặc đang đứng tên hợp đồng
+     * Nếu hợp đồng đã bị xóa, thì vẫn có thể xóa khách thuê (dọn rác mồ côi).
      */
     public function destroy(Request $request, int $id): JsonResponse
     {
@@ -142,6 +144,7 @@ class TenantController extends Controller
             fn($query) => $query->where('user_id', $request->user()->id)
         )->findOrFail($id);
 
+        // 1. Chặn nếu đang ở trong phòng (chưa rời đi)
         if (
             $tenant->roomResidents()
             ->whereIn('status', ['pending', 'active'])
@@ -150,13 +153,23 @@ class TenantController extends Controller
             throw new BusinessException('Không thể xóa khách thuê đang còn cư trú. Vui lòng thực hiện rời phòng trước.');
         }
 
-        Storage::disk('public')->deleteDirectory("tenants/{$tenant->id}");
+        // 2. Chặn nếu khách ĐANG ĐỨNG TÊN một hợp đồng thực sự (active hoặc ended)
+        // Trừ khi hợp đồng đó đã bị chủ trọ xóa hẳn khỏi Database (trường hợp nhập nhầm)
+        if ($tenant->leases()->exists()) {
+            throw new BusinessException('Không thể xóa hồ sơ này vì khách thuê đang đứng tên hợp đồng trong hệ thống. Vui lòng xóa hợp đồng trước nếu đây là dữ liệu nhầm lẫn.');
+        }
 
+        // 3. Tiến hành "Dọn rác" trước khi xóa (Ngăn chặn lỗi SQL 1451 RESTRICT)
+        // Nếu code chạy đến đây, nghĩa là Hợp đồng đã bị xóa -> Các record này chỉ là rác mồ côi
+        $tenant->leaseMembers()->delete();
+        $tenant->roomResidents()->delete();
+
+        // 4. Xóa ảnh và xóa khách thuê
+        Storage::disk('public')->deleteDirectory("tenants/{$tenant->id}");
         $tenant->delete();
 
         return response()->json(['message' => 'Xóa khách thuê thành công.']);
     }
-
 
 
     /**
