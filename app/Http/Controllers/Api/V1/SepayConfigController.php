@@ -57,6 +57,6 @@ class SepayConfigController extends Controller
             return response()->json(['message' => 'Kết nối API SePay thành công!']);
         }
 
-        return response()->json(['message' => 'Kết nối thất bại. Vui lòng kiểm tra lại API Token.'], 401);
+        return response()->json(['message' => 'Kết nối thất bại. Vui lòng kiểm tra lại API Token.'], 402);
     }
 }

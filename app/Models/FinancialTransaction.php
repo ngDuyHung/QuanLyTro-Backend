@@ -115,7 +115,7 @@ class FinancialTransaction extends Model
      */
     public function sepayTransaction(): BelongsTo
     {
-        return $this->belongsTo(SePayTransaction::class);
+        return $this->belongsTo(SePayTransaction::class, 'sepay_transaction_id');
     }
 
     /**

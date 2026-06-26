@@ -53,7 +53,7 @@ class BankAccountController extends Controller
 
         return (new BankAccountResource($bankAccount))
             ->response()
-            ->setStatusCode(21);
+            ->setStatusCode(201);
     }
 
     /**

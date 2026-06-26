@@ -80,7 +80,7 @@ class SePayTransaction extends Model
      */
     public function financialTransactions(): HasMany
     {
-        return $this->hasMany(FinancialTransaction::class);
+        return $this->hasMany(FinancialTransaction::class, 'sepay_transaction_id');
     }
 
     // ===== Scopes =====
