@@ -197,4 +197,22 @@ class SePayTransactionController extends Controller
             })
             ->findOrFail($id);
     }
+
+    /**
+     * Endpoint Public để SePay gọi Webhook đến.
+     */
+    public function webhook(Request $request, \App\Services\SePayTransactionService $sePayTransactionService): JsonResponse
+    {
+        // Nhận payload từ SePay
+        $payload = $request->all();
+
+        // Đẩy vào Service xử lý (Tự động tìm chủ trọ, đối soát...)
+        $sePayTransactionService->handleWebhook($payload);
+
+        // SePay yêu cầu trả về status 200 kèm json success
+        return response()->json([
+            'success' => true,
+            'message' => 'Webhook received and processed successfully'
+        ]);
+    }
 }

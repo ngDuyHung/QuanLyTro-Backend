@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\ServiceType;
 use App\Exceptions\Domain\BusinessException;
 use App\Models\FinancialTransactionAllocation;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Lease;
+use App\Models\MeterReading;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -91,6 +93,12 @@ class InvoiceService
                 $invoice->items()->create($item);
             }
 
+            // Tìm tất cả các chỉ số điện/nước chưa được chốt của phòng này đến hết ngày kỳ này
+            \App\Models\MeterReading::where('lease_id', $lease->id)
+                ->whereNull('invoice_id')
+                ->where('reading_date', '<=', $data['period_to'])
+                ->update(['invoice_id' => $invoice->id]);
+
             return $invoice->fresh(['lease.room.property', 'items']);
         });
     }
@@ -156,6 +164,9 @@ class InvoiceService
                 'cancelled_at' => now(),
                 'cancel_reason' => $reason,
             ]);
+
+            // Trả lại trạng thái tự do (null) cho chỉ số để có thể tạo lại hóa đơn khác
+            \App\Models\MeterReading::where('invoice_id', $invoice->id)->update(['invoice_id' => null]);
 
             return $invoice->fresh(['lease.room.property', 'items']);
         });
@@ -361,6 +372,74 @@ class InvoiceService
 
         return 'issued';
     }
+
+    /**
+     * TÍNH TOÁN TRƯỚC DỮ LIỆU HÓA ĐƠN (PREPARE)
+     * Trả về mảng dữ liệu gợi ý cho Frontend hiển thị.
+     */
+
+
+    public function prepareInvoiceData(int $leaseId, string $periodTo, int $userId): array
+    {
+        $lease = Lease::with(['room.property', 'tenant'])
+            ->whereHas('room.property', fn($q) => $q->where('user_id', $userId))
+            ->findOrFail($leaseId);
+
+        $items = [];
+
+        // 1. Tiền phòng cố định
+        $items[] = [
+            'charge_type' => 'rent',
+            'description' => 'Tiền phòng',
+            'unit' => 'Tháng',
+            'quantity' => 1,
+            'unit_price_snapshot' => $lease->room->price,
+            'amount' => $lease->room->price,
+        ];
+
+        // 2. Chỉ số Điện & Nước chưa chốt hóa đơn
+        $unbilledReadings = MeterReading::where('lease_id', $leaseId)
+            ->whereNull('invoice_id')
+            ->where('reading_date', '<=', $periodTo)
+            ->get();
+
+        foreach ($unbilledReadings as $reading) {
+            $usage = max(0, $reading->current_reading - $reading->previous_reading);
+
+            // Ép kiểu về Enum (nếu đang là string)
+            $enumType = is_string($reading->type) ? ServiceType::from($reading->type) : $reading->type;
+
+            $items[] = [
+                'charge_type' => $enumType->value,
+                'description' => sprintf(
+                    'Tiền %s (Số cũ: %s - Số mới: %s)',
+                    mb_strtolower($enumType->label()),
+                    $reading->previous_reading,
+                    $reading->current_reading
+                ),
+                'unit' => $enumType->unit(), // Tự động lấy kWh hoặc m³
+                'quantity' => $usage,
+                'unit_price_snapshot' => 0, // FE sẽ map giá sau
+                'amount' => 0,
+            ];
+        }
+
+        // Tạm thời bỏ tự động tính nợ cũ theo logic mới
+        // $previousDebt = Invoice::where('lease_id', $leaseId)
+        //     ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+        //     ->sum('remaining_amount');
+
+        return [
+            'lease_id' => $lease->id,
+            'room_name' => $lease->room->name,
+            'tenant_name' => $lease->tenant->full_name,
+            // 'previous_debt_amount' => (int) $previousDebt,
+            // Fix cứng số 0, thay vì dùng biến $previousDebt như cũ
+            'previous_debt_amount' => 0,
+            'suggested_items' => $items,
+        ];
+    }
+
 
     /**
      * Sinh mã hóa đơn.

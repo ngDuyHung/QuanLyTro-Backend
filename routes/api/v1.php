@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\BankAccountController;
 use App\Http\Controllers\Api\V1\LeaseController;
 use App\Http\Controllers\Api\V1\LeaseMemberController;
 use App\Http\Controllers\Api\V1\MeterReadingController;
@@ -14,6 +15,7 @@ use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\FinancialTransactionController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\OcrController;
+use App\Http\Controllers\Api\V1\SepayConfigController;
 use App\Http\Controllers\Api\V1\SettingController;
 use App\Http\Controllers\Api\V1\UtilityController;
 use App\Models\Room;
@@ -100,6 +102,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::delete('readings/{id}',           [MeterReadingController::class, 'destroy'])->name('readings.destroy');
 
     // ── Invoices (Hóa đơn) ───────────────────────────────────────────────
+
+    // API tính toán trước số liệu điền vào Form
+    Route::get('invoices/prepare', [InvoiceController::class, 'prepare'])->name('invoices.prepare');
     Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index');
     Route::post('invoices', [InvoiceController::class, 'store'])->name('invoices.store');
     Route::post('invoices/bulk-create', [InvoiceController::class, 'bulkCreate'])->name('invoices.bulk-create');
@@ -110,6 +115,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     Route::post('invoices/{id}/issue', [InvoiceController::class, 'issue'])->name('invoices.issue');
     Route::post('invoices/{id}/cancel', [InvoiceController::class, 'cancel'])->name('invoices.cancel');
+
+
 
     // ── Financial Transactions (Thu chi) ─────────────────────────────────────
     Route::get('financial-transactions', [FinancialTransactionController::class, 'index'])
@@ -150,4 +157,18 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     // ── Utilities (Quản lý chỉ số Điện / Nước) ─────────────────────────────────
     Route::apiResource('utilities', UtilityController::class);
+
+    // ── SePay Config (Cấu hình SePay) ─────────────────────────────────────────────
+    Route::prefix('settings/sepay')->name('settings.sepay.')->group(function (): void {
+        Route::get('/', [SepayConfigController::class, 'show'])->name('show');
+        Route::post('/', [SepayConfigController::class, 'save'])->name('save');
+        Route::delete('/', [SepayConfigController::class, 'destroy'])->name('destroy');
+        Route::post('/test', [SepayConfigController::class, 'testConnection'])->name('test');
+    });
+
+    // ROUTE BANK ACCOUNTS VÀO PHẦN PRIVATE
+    Route::apiResource('bank-accounts', BankAccountController::class);
 });
+
+// 1. THÊM ROUTE WEBHOOK VÀO PHẦN PUBLIC (Nằm ngoài auth:sanctum)
+Route::post('sepay-webhook', [SePayTransactionController::class, 'webhook'])->name('sepay.webhook');

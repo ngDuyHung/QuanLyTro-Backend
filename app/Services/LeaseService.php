@@ -69,10 +69,12 @@ class LeaseService
                     'status' => RoomStatus::Occupied->value,
                 ]);
 
+                // Tạo chỉ số ban đầu cho hợp đồng mới cho điện và nước bằng giá trị current_reading = previous_reading = chỉ số đầu vào từ request
+                // vì mới vào nếu phải cho nó bằng nhau để tính ra 0đ hóa đơn vì thu đầu vào không tính điện nước. 
                 MeterReading::create([
                     'lease_id' => $lease->id,
                     'type' => MeterType::Electricity->value,
-                    'previous_reading' => 0,
+                    'previous_reading' => $data['electricity_reading'], //Cho previous_reading = current_reading 
                     'current_reading' => $data['electricity_reading'],
                     'reading_date' => $data['start_date'],
                 ]);
@@ -80,7 +82,7 @@ class LeaseService
                 MeterReading::create([
                     'lease_id' => $lease->id,
                     'type' => MeterType::Water->value,
-                    'previous_reading' => 0,
+                    'previous_reading' => $data['water_reading'], //Cho previous_reading = current_reading
                     'current_reading' => $data['water_reading'],
                     'reading_date' => $data['start_date'],
                 ]);

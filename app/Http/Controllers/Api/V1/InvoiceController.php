@@ -238,4 +238,18 @@ class InvoiceController extends Controller
             'message' => 'Xóa hóa đơn thành công.',
         ]);
     }
+
+    /**
+     * TÍNH TOÁN TRƯỚC DỮ LIỆU HÓA ĐƠN (PREPARE)
+     */
+    public function prepare(\App\Http\Requests\Invoice\PrepareInvoiceRequest $request): JsonResponse
+    {
+        $data = $this->invoiceService->prepareInvoiceData(
+            leaseId: (int) $request->lease_id,
+            periodTo: $request->period_to,
+            userId: $request->user()->id
+        );
+
+        return response()->json(['data' => $data]);
+    }
 }

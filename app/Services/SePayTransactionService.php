@@ -90,118 +90,7 @@ class SePayTransactionService
         });
     }
 
-    /**
-     * Xử lý match giao dịch SePay sau khi đã lưu raw payload.
-     */
-    public function processMatching(SePayTransaction $sePayTransaction, mixed $info = null): SePayTransaction
-    {
-        return DB::transaction(function () use ($sePayTransaction, $info): SePayTransaction {
-            $sePayTransaction->refresh();
 
-            if ($sePayTransaction->transfer_type !== 'in') {
-                $sePayTransaction->update([
-                    'match_status' => 'ignored',
-                    'processed_at' => now(),
-                    'error_message' => 'Bỏ qua giao dịch tiền ra.',
-                ]);
-
-                return $sePayTransaction->fresh();
-            }
-
-            if ((int) $sePayTransaction->transfer_amount <= 0) {
-                $sePayTransaction->update([
-                    'match_status' => 'need_review',
-                    'processed_at' => now(),
-                    'error_message' => 'Số tiền giao dịch không hợp lệ.',
-                ]);
-
-                return $sePayTransaction->fresh();
-            }
-
-            $paymentCode = $this->extractPaymentCode(
-                content: (string) $sePayTransaction->content,
-                code: $sePayTransaction->code ? (string) $sePayTransaction->code : null,
-                info: $info
-            );
-
-            if (!$paymentCode) {
-                $sePayTransaction->update([
-                    'match_status' => 'need_review',
-                    'processed_at' => now(),
-                    'error_message' => 'Không tìm thấy mã hóa đơn trong nội dung chuyển khoản.',
-                ]);
-
-                return $sePayTransaction->fresh();
-            }
-
-            $sePayTransaction->update([
-                'matched_payment_code' => $paymentCode,
-            ]);
-
-            $invoice = Invoice::query()
-                ->with(['lease.room.property', 'items'])
-                ->where('invoice_code', $paymentCode)
-                ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
-                ->first();
-
-            if (!$invoice) {
-                $sePayTransaction->update([
-                    'match_status' => 'need_review',
-                    'processed_at' => now(),
-                    'error_message' => "Không tìm thấy hóa đơn hợp lệ với mã {$paymentCode}.",
-                ]);
-
-                return $sePayTransaction->fresh();
-            }
-
-            if ((int) $invoice->remaining_amount <= 0) {
-                $sePayTransaction->update([
-                    'match_status' => 'need_review',
-                    'processed_at' => now(),
-                    'error_message' => "Hóa đơn {$invoice->invoice_code} không còn công nợ.",
-                ]);
-
-                return $sePayTransaction->fresh();
-            }
-
-            $transferAmount = (int) $sePayTransaction->transfer_amount;
-            $remainingAmount = (int) $invoice->remaining_amount;
-
-            $allocatedAmount = min($transferAmount, $remainingAmount);
-
-            try {
-                $this->financialTransactionService->createInvoicePaymentFromSePay(
-                    invoice: $invoice,
-                    sePayTransaction: $sePayTransaction,
-                    allocatedAmount: $allocatedAmount,
-                    createdBy: null
-                );
-
-                $matchStatus = $allocatedAmount === $transferAmount
-                    ? 'matched'
-                    : 'partially_matched';
-
-                $sePayTransaction->update([
-                    'match_status' => $matchStatus,
-                    'matched_amount' => $allocatedAmount,
-                    'processed_at' => now(),
-                    'error_message' => $matchStatus === 'partially_matched'
-                        ? 'Giao dịch đã cấn một phần, còn tiền dư cần kiểm tra.'
-                        : null,
-                ]);
-
-                return $sePayTransaction->fresh();
-            } catch (Throwable $exception) {
-                $sePayTransaction->update([
-                    'match_status' => 'need_review',
-                    'processed_at' => now(),
-                    'error_message' => $exception->getMessage(),
-                ]);
-
-                return $sePayTransaction->fresh();
-            }
-        });
-    }
 
     /**
      * Match thủ công một giao dịch SePay vào một hóa đơn.
@@ -322,20 +211,116 @@ class SePayTransactionService
         }
     }
 
-    /**
-     * Parse mã hóa đơn/mã thanh toán từ nội dung chuyển khoản.
-     *
-     * Ưu tiên:
-     * 1. info do package parse được nếu có.
-     * 2. code nếu code giống mã hóa đơn.
-     * 3. content/description theo pattern.
-     *
-     * SEPAY_MATCH_PATTERN nên đặt là HD nếu mã hóa đơn bắt đầu bằng HD.
-     */
-    private function extractPaymentCode(string $content, ?string $code = null, mixed $info = null): ?string
-    {
-        $patternPrefix = (string) config('sepay.pattern', env('SEPAY_MATCH_PATTERN', 'HD'));
 
+    public function processMatching(SePayTransaction $sePayTransaction, mixed $info = null): SePayTransaction
+    {
+        return DB::transaction(function () use ($sePayTransaction, $info): SePayTransaction {
+            $sePayTransaction->refresh();
+
+            if ($sePayTransaction->transfer_type !== 'in') {
+                $sePayTransaction->update([
+                    'match_status' => 'ignored',
+                    'processed_at' => now(),
+                    'error_message' => 'Bỏ qua giao dịch tiền ra.',
+                ]);
+                return $sePayTransaction->fresh();
+            }
+
+            // 1. Tìm chủ sở hữu của tài khoản ngân hàng nhận tiền
+            $bankAccount = $sePayTransaction->bankAccount;
+            if (!$bankAccount) {
+                $sePayTransaction->update([
+                    'match_status' => 'need_review',
+                    'error_message' => 'Không tìm thấy tài khoản ngân hàng nhận tiền trong hệ thống.',
+                ]);
+                return $sePayTransaction->fresh();
+            }
+
+            $landlordId = $bankAccount->user_id;
+
+            // 2. Lấy cấu hình của chủ trọ đó (Tiền tố mã Hóa đơn & Check duyệt tay)
+            $sepayConfig = \App\Models\SepayConfig::forUser($landlordId);
+            $patternPrefix = $sepayConfig->matchPattern();
+            $isAutoApprove = $sepayConfig->autoConfirm();
+
+            $paymentCode = $this->extractPaymentCode(
+                content: (string) $sePayTransaction->content,
+                patternPrefix: $patternPrefix,
+                code: $sePayTransaction->code ? (string) $sePayTransaction->code : null,
+                info: $info
+            );
+
+            if (!$paymentCode) {
+                $sePayTransaction->update([
+                    'match_status' => 'need_review',
+                    'processed_at' => now(),
+                    'error_message' => 'Không tìm thấy mã hóa đơn trong nội dung chuyển khoản.',
+                ]);
+                return $sePayTransaction->fresh();
+            }
+
+            $sePayTransaction->update(['matched_payment_code' => $paymentCode]);
+
+            $invoice = Invoice::query()
+                ->with(['lease.room.property', 'items'])
+                ->where('invoice_code', $paymentCode)
+                ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+                ->first();
+
+            if (!$invoice) {
+                $sePayTransaction->update([
+                    'match_status' => 'need_review',
+                    'processed_at' => now(),
+                    'error_message' => "Không tìm thấy hóa đơn hợp lệ với mã {$paymentCode}.",
+                ]);
+                return $sePayTransaction->fresh();
+            }
+
+            // 3. Logic chặn duyệt tự động nếu chủ trọ cấu hình DUYỆT TAY
+            if (!$isAutoApprove) {
+                $sePayTransaction->update([
+                    'match_status' => 'need_review',
+                    'processed_at' => now(),
+                    'error_message' => 'Giao dịch khớp mã hóa đơn. Đang chờ chủ trọ duyệt thủ công.',
+                ]);
+                return $sePayTransaction->fresh();
+            }
+
+            $transferAmount = (int) $sePayTransaction->transfer_amount;
+            $remainingAmount = (int) $invoice->remaining_amount;
+            $allocatedAmount = min($transferAmount, $remainingAmount);
+
+            try {
+                $this->financialTransactionService->createInvoicePaymentFromSePay(
+                    invoice: $invoice,
+                    sePayTransaction: $sePayTransaction,
+                    allocatedAmount: $allocatedAmount,
+                    createdBy: null
+                );
+
+                $matchStatus = $allocatedAmount === $transferAmount ? 'matched' : 'partially_matched';
+                $sePayTransaction->update([
+                    'match_status' => $matchStatus,
+                    'matched_amount' => $allocatedAmount,
+                    'processed_at' => now(),
+                ]);
+
+                return $sePayTransaction->fresh();
+            } catch (\Throwable $exception) {
+                $sePayTransaction->update([
+                    'match_status' => 'need_review',
+                    'processed_at' => now(),
+                    'error_message' => $exception->getMessage(),
+                ]);
+                return $sePayTransaction->fresh();
+            }
+        });
+    }
+
+    // Đã thêm tham số patternPrefix lấy từ DB thay vì file Env cứng
+    //Hàm này sẽ tìm kiếm mã hóa đơn trong nội dung chuyển khoản hoặc code hoặc info (nếu có) dựa trên tiền tố patternPrefix.
+    private function extractPaymentCode(string $content, string $patternPrefix, ?string $code = null, mixed $info = null): ?string
+    {
         $candidates = [
             $this->stringOrNull($info),
             $this->stringOrNull($code),
@@ -348,7 +333,6 @@ class SePayTransactionService
         }
 
         $haystack = strtoupper($content);
-
         $regex = '/(' . preg_quote(strtoupper($patternPrefix), '/') . '[A-Z0-9\-_]+)/';
 
         if (preg_match($regex, $haystack, $matches)) {
@@ -357,6 +341,7 @@ class SePayTransactionService
 
         return null;
     }
+
 
     private function stringOrNull(mixed $value): ?string
     {
