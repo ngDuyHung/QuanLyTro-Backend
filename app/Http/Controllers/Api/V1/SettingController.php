@@ -60,4 +60,52 @@ class SettingController extends Controller
 
         return $pdf->download("Hop_dong_thue_phong_{$id}.pdf");
     }
+
+
+
+    /**
+     * Lấy mẫu Hóa đơn
+     */
+    public function getInvoiceTemplate(Request $request)
+    {
+        $userId = $request->user()->id;
+        $template = $this->settingService->getInvoiceTemplate($userId);
+
+        return response()->json([
+            'data' => [
+                'template' => $template
+            ]
+        ]);
+    }
+
+    /**
+     * Lưu mẫu Hóa đơn
+     */
+    public function saveInvoiceTemplate(Request $request)
+    {
+        $request->validate([
+            'template' => 'nullable|string'
+        ]);
+
+        $userId = $request->user()->id;
+        $this->settingService->saveInvoiceTemplate($userId, $request->input('template', ''));
+
+        return response()->json([
+            'message' => 'Đã lưu cấu hình mẫu hóa đơn thành công.'
+        ]);
+    }
+
+    /**
+     * Xuất PDF Hóa đơn
+     */
+    public function exportInvoicePdf(Request $request, $id)
+    {
+        $userId = $request->user()->id;
+
+        // Gọi hàm từ Service bạn vừa thêm
+        $pdf = $this->settingService->generateInvoicePdf((int) $id, $userId);
+
+        // Trả về file PDF để trình duyệt có thể tải xuống
+        return $pdf->download("Hoa_don_{$id}.pdf");
+    }
 }

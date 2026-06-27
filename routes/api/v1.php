@@ -116,7 +116,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('invoices/{id}/issue', [InvoiceController::class, 'issue'])->name('invoices.issue');
     Route::post('invoices/{id}/cancel', [InvoiceController::class, 'cancel'])->name('invoices.cancel');
 
+    // Group Route cho cấu hình mẫu hóa đơn
+    Route::get('/settings/invoice-template', [SettingController::class, 'getInvoiceTemplate']);
+    Route::post('/settings/invoice-template', [SettingController::class, 'saveInvoiceTemplate']);
 
+    // Route xuất PDF hóa đơn (Có thể đặt tiền tố /invoices cho chuẩn RESTful)
+    Route::get('/invoices/{id}/export-pdf', [SettingController::class, 'exportInvoicePdf']);
 
     // ── Financial Transactions (Thu chi) ─────────────────────────────────────
     Route::get('financial-transactions', [FinancialTransactionController::class, 'index'])

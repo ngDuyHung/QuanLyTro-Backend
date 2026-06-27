@@ -6,6 +6,9 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Exceptions\Domain\BusinessException;
+use App\Http\Requests\FinancialTransaction\CancelFinancialTransactionRequest;
+use App\Http\Requests\FinancialTransaction\ReceiveInvoicePaymentRequest;
+use App\Http\Requests\FinancialTransaction\StoreFinancialTransactionRequest;
 use App\Http\Resources\FinancialTransaction\FinancialTransactionResource;
 use App\Models\FinancialTransaction;
 use App\Models\Property;
@@ -99,54 +102,10 @@ class FinancialTransactionController extends Controller
      * Không dùng method = sepay ở đây.
      * SePay sẽ đi qua webhook và SePayTransactionService.
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreFinancialTransactionRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'property_id' => ['required', 'integer', 'exists:properties,id'],
-            'room_id' => ['nullable', 'integer', 'exists:rooms,id'],
-            'lease_id' => ['nullable', 'integer', 'exists:leases,id'],
-            'tenant_id' => ['nullable', 'integer', 'exists:tenants,id'],
-            'bank_account_id' => ['nullable', 'integer', 'exists:bank_accounts,id'],
-
-            'direction' => ['required', 'in:income,expense'],
-
-            'category' => [
-                'required',
-                'in:holding_deposit,security_deposit,deposit_forfeit,refund_security_deposit,damage_fee,repair,operation,other_income,other_expense',
-            ],
-
-            'accounting_type' => [
-                'required',
-                'in:revenue,liability_in,liability_out,expense,receivable_adjustment',
-            ],
-
-            'amount' => ['required', 'integer', 'min:1'],
-
-            'method' => ['required', 'in:cash,bank_transfer,other'],
-
-            'transaction_date' => ['nullable', 'date'],
-
-            'transfer_content' => ['nullable', 'string', 'max:255'],
-            'bank_transaction_code' => ['nullable', 'string', 'max:100'],
-
-            'description' => ['nullable', 'string', 'max:255'],
-            'note' => ['nullable', 'string'],
-        ], [
-            'property_id.required' => 'Vui lòng chọn khu nhà.',
-            'property_id.exists' => 'Khu nhà không tồn tại.',
-            'direction.required' => 'Vui lòng chọn loại thu hoặc chi.',
-            'direction.in' => 'Loại giao dịch không hợp lệ.',
-            'category.required' => 'Vui lòng chọn loại nghiệp vụ thu chi.',
-            'category.in' => 'Loại nghiệp vụ thu chi không hợp lệ.',
-            'accounting_type.required' => 'Vui lòng chọn bản chất kế toán.',
-            'accounting_type.in' => 'Bản chất kế toán không hợp lệ.',
-            'amount.required' => 'Vui lòng nhập số tiền.',
-            'amount.integer' => 'Số tiền phải là số nguyên.',
-            'amount.min' => 'Số tiền phải lớn hơn 0.',
-            'method.required' => 'Vui lòng chọn phương thức thu chi.',
-            'method.in' => 'Phương thức thu chi không hợp lệ.',
-        ]);
-
+       // Lấy dữ liệu đã được validate an toàn từ Form Request
+        $data = $request->validated();
         $this->assertPropertyOwned(
             propertyId: (int) $data['property_id'],
             userId: $request->user()->id
@@ -176,31 +135,9 @@ class FinancialTransactionController extends Controller
      * Dùng cho:
      * POST /invoices/{id}/receive-payment
      */
-    public function receiveInvoicePayment(Request $request, int $invoice): JsonResponse
+    public function receiveInvoicePayment(ReceiveInvoicePaymentRequest $request, int $invoice): JsonResponse
     {
-        $data = $request->validate([
-            'amount' => ['required', 'integer', 'min:1'],
-
-            'method' => ['required', 'in:cash,bank_transfer'],
-
-            'bank_account_id' => ['nullable', 'integer', 'exists:bank_accounts,id'],
-
-            'transaction_date' => ['nullable', 'date'],
-
-            'transfer_content' => ['nullable', 'string', 'max:255'],
-            'bank_transaction_code' => ['nullable', 'string', 'max:100'],
-
-            'description' => ['nullable', 'string', 'max:255'],
-            'note' => ['nullable', 'string'],
-        ], [
-            'amount.required' => 'Vui lòng nhập số tiền thanh toán.',
-            'amount.integer' => 'Số tiền thanh toán phải là số nguyên.',
-            'amount.min' => 'Số tiền thanh toán phải lớn hơn 0.',
-            'method.required' => 'Vui lòng chọn phương thức thanh toán.',
-            'method.in' => 'Phương thức thanh toán không hợp lệ.',
-            'bank_account_id.exists' => 'Tài khoản ngân hàng không tồn tại.',
-            'transaction_date.date' => 'Ngày thanh toán không hợp lệ.',
-        ]);
+        $data = $request->validated();
 
         $transaction = $this->financialTransactionService->receiveInvoicePayment(
             invoiceId: $invoice,
@@ -243,14 +180,9 @@ class FinancialTransactionController extends Controller
      * Nếu đã cấn tiền vào hóa đơn thì nên làm service điều chỉnh riêng,
      * tránh sai công nợ.
      */
-    public function cancel(Request $request, int $id): JsonResponse
+    public function cancel(CancelFinancialTransactionRequest $request, int $id): JsonResponse
     {
-        $data = $request->validate([
-            'cancel_reason' => ['required', 'string', 'max:255'],
-        ], [
-            'cancel_reason.required' => 'Vui lòng nhập lý do hủy giao dịch.',
-            'cancel_reason.max' => 'Lý do hủy không được vượt quá 255 ký tự.',
-        ]);
+        $data = $request->validated();
 
         $transaction = FinancialTransaction::query()
             ->with('allocations')
