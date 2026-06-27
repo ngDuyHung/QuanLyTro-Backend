@@ -11,6 +11,7 @@ use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Lease;
 use App\Models\MeterReading;
+use App\Models\ServicePrice;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -381,23 +382,24 @@ class InvoiceService
 
     public function prepareInvoiceData(int $leaseId, string $periodTo, int $userId): array
     {
-        $lease = Lease::with(['room.property', 'tenant'])
+        $lease = Lease::with(['room.property', 'tenant', 'serviceItems'])
             ->whereHas('room.property', fn($q) => $q->where('user_id', $userId))
             ->findOrFail($leaseId);
 
         $items = [];
+        $propertyId = $lease->room->property_id;
 
-        // 1. Tiền phòng cố định
+        // 1. Tiền phòng cố định (Khớp loại khoản phí là 'room' theo StoreInvoiceRequest)
         $items[] = [
-            'charge_type' => 'rent',
+            'charge_type' => 'room',
             'description' => 'Tiền phòng',
             'unit' => 'Tháng',
             'quantity' => 1,
-            'unit_price_snapshot' => $lease->room->price,
-            'amount' => $lease->room->price,
+            'unit_price_snapshot' => $lease->room->current_price,
+            'amount' => $lease->room->current_price,
         ];
 
-        // 2. Chỉ số Điện & Nước chưa chốt hóa đơn
+        // 2. Chỉ số Điện & Nước chưa chốt hóa đơn (Giữ nguyên logic của bạn)
         $unbilledReadings = MeterReading::where('lease_id', $leaseId)
             ->whereNull('invoice_id')
             ->where('reading_date', '<=', $periodTo)
@@ -405,8 +407,6 @@ class InvoiceService
 
         foreach ($unbilledReadings as $reading) {
             $usage = max(0, $reading->current_reading - $reading->previous_reading);
-
-            // Ép kiểu về Enum (nếu đang là string)
             $enumType = is_string($reading->type) ? ServiceType::from($reading->type) : $reading->type;
 
             $items[] = [
@@ -417,24 +417,43 @@ class InvoiceService
                     $reading->previous_reading,
                     $reading->current_reading
                 ),
-                'unit' => $enumType->unit(), // Tự động lấy kWh hoặc m³
+                'unit' => $enumType->value === 'electricity' ? 'kWh' : 'm³',
                 'quantity' => $usage,
-                'unit_price_snapshot' => 0, // FE sẽ map giá sau
+                'unit_price_snapshot' => 0, // FE sẽ tự động mapping giá sau khi lấy cục diện này
                 'amount' => 0,
             ];
         }
 
-        // Tạm thời bỏ tự động tính nợ cũ theo logic mới
-        // $previousDebt = Invoice::where('lease_id', $leaseId)
-        //     ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
-        //     ->sum('remaining_amount');
+        // 3. TỰ ĐỘNG TÍNH TOÁN CÁC DỊCH VỤ CỐ ĐỊNH ĐÃ ĐĂNG KÝ THEO HỢP ĐỒNG
+        // Gọi hàm Helper từ Bước 5 để bốc bảng giá chuẩn
+        $applicablePrices = ServicePrice::getApplicablePrices($propertyId);
+
+        foreach ($lease->serviceItems as $serviceItem) {
+            $type = $serviceItem->service_type->value;
+            $priceRule = $applicablePrices->get($type);
+
+            if ($priceRule) {
+                // Thứ tự ưu tiên: Giá thỏa thuận riêng trong HĐ -> Giá cấu hình khu/hệ thống
+                $unitPrice = $serviceItem->custom_price ?? $priceRule->unit_price;
+                $quantity = $serviceItem->quantity;
+                $amount = $unitPrice * $quantity;
+
+                $items[] = [
+                    'service_price_id' => $priceRule->id,
+                    'charge_type' => $type,
+                    'description' => 'Tiền ' . mb_strtolower($serviceRuleDescription ?? $serviceItem->service_type->label()),
+                    'unit' => 'Tháng/Lần',
+                    'quantity' => $quantity,
+                    'unit_price_snapshot' => $unitPrice,
+                    'amount' => $amount,
+                ];
+            }
+        }
 
         return [
             'lease_id' => $lease->id,
             'room_name' => $lease->room->name,
             'tenant_name' => $lease->tenant->full_name,
-            // 'previous_debt_amount' => (int) $previousDebt,
-            // Fix cứng số 0, thay vì dùng biến $previousDebt như cũ
             'previous_debt_amount' => 0,
             'suggested_items' => $items,
         ];

@@ -81,7 +81,8 @@ class FinancialTransactionController extends Controller
             ->when($request->query('date_to'), function ($query, $dateTo): void {
                 $query->whereDate('transaction_date', '<=', $dateTo);
             })
-            ->latest('transaction_date')
+            ->orderBy('transaction_date', 'desc') // Sắp xếp theo ngày mới nhất
+            ->orderBy('id', 'desc')               // Nếu trùng ngày, ID nào lớn hơn (tạo sau) lên trước
             ->paginate($request->integer('per_page', 15));
 
         return FinancialTransactionResource::collection($transactions)->response();
@@ -104,7 +105,7 @@ class FinancialTransactionController extends Controller
      */
     public function store(StoreFinancialTransactionRequest $request): JsonResponse
     {
-       // Lấy dữ liệu đã được validate an toàn từ Form Request
+        // Lấy dữ liệu đã được validate an toàn từ Form Request
         $data = $request->validated();
         $this->assertPropertyOwned(
             propertyId: (int) $data['property_id'],

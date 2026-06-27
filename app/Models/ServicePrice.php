@@ -74,4 +74,27 @@ class ServicePrice extends Model
     {
         $query->whereNull('property_id');
     }
+
+    /**
+     * Lấy toàn bộ bảng giá dịch vụ áp dụng cho một khu nhà cụ thể (Đã gộp giá riêng biệt và giá mặc định).
+     * * @return \Illuminate\Support\Collection<string, ServicePrice>
+     */
+    public static function getApplicablePrices(int $propertyId): \Illuminate\Support\Collection
+    {
+        // 1. Lấy tất cả giá cấu hình riêng của khu nhà hiện tại
+        $propertyPrices = self::where('property_id', $propertyId)
+            ->get()
+            ->keyBy(fn($p) => $p->service_type->value);
+
+        $assignedTypes = $propertyPrices->keys()->all();
+
+        // 2. Lấy giá mặc định hệ thống đối với những loại dịch vụ chưa cấu hình riêng
+        $globalPrices = self::whereNull('property_id')
+            ->when(!empty($assignedTypes), fn($q) => $q->whereNotIn('service_type', $assignedTypes))
+            ->get()
+            ->keyBy(fn($p) => $p->service_type->value);
+
+        // 3. Kết hợp lại và trả về Collection định dạng key là loại dịch vụ
+        return $propertyPrices->merge($globalPrices);
+    }
 }

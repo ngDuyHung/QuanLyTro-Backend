@@ -28,11 +28,11 @@ class LeaseController extends Controller
     public function index(Request $request): JsonResponse
     {
         $leases = Lease::with(['room:id,name,property_id', 'room.property:id,name', 'tenant:id,full_name,phone'])
-            ->whereHas('room.property', fn ($q) => $q->where('user_id', $request->user()->id))
-            ->when($request->room_id,     fn ($q) => $q->where('room_id', $request->room_id))
-            ->when($request->tenant_id,   fn ($q) => $q->where('tenant_id', $request->tenant_id))
-            ->when($request->status,      fn ($q) => $q->where('status', $request->status))
-            ->when($request->property_id, fn ($q) => $q->whereHas('room', fn ($r) => $r->where('property_id', $request->property_id)))
+            ->whereHas('room.property', fn($q) => $q->where('user_id', $request->user()->id))
+            ->when($request->room_id,     fn($q) => $q->where('room_id', $request->room_id))
+            ->when($request->tenant_id,   fn($q) => $q->where('tenant_id', $request->tenant_id))
+            ->when($request->status,      fn($q) => $q->where('status', $request->status))
+            ->when($request->property_id, fn($q) => $q->whereHas('room', fn($r) => $r->where('property_id', $request->property_id)))
             ->latest()
             ->paginate($request->integer('per_page', 15));
 
@@ -46,12 +46,13 @@ class LeaseController extends Controller
     public function show(Request $request, int $id): JsonResponse
     {
         $lease = Lease::with([
-                'room.property:id,name,address',
-                'tenant',
-                'members',
-                'invoices:id,lease_id,invoice_code,status,total_amount',
-            ])
-            ->whereHas('room.property', fn ($q) => $q->where('user_id', $request->user()->id))
+            'room.property:id,name,address',
+            'tenant',
+            'members',
+            'serviceItems',
+            'invoices:id,lease_id,invoice_code,status,total_amount',
+        ])
+            ->whereHas('room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
         return (new LeaseResource($lease))->response();
@@ -71,13 +72,10 @@ class LeaseController extends Controller
         return (new LeaseResource($lease))->response()->setStatusCode(201);
     }
 
-    /**
-     * Cập nhật hợp đồng (chỉ các trường không ảnh hưởng đến trạng thái).
-     * Ownership check: qua phòng -> khu nhà.
-     */
+    //chức năng update hợp đồng thuê (cập nhật thông tin chính + dịch vụ đi kèm)
     public function update(UpdateLeaseRequest $request, int $id): JsonResponse
     {
-        $lease = Lease::whereHas('room.property', fn ($q) => $q->where('user_id', $request->user()->id))
+        $lease = Lease::whereHas('room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
         // Chỉ cập nhật hợp đồng đang active
@@ -85,9 +83,36 @@ class LeaseController extends Controller
             throw new BusinessException('Chỉ có thể cập nhật hợp đồng đang có hiệu lực.');
         }
 
-        $lease->update($request->validated());
+        // Dùng DB::transaction để đảm bảo tính toàn vẹn dữ liệu khi ghi nhiều bảng
+        \Illuminate\Support\Facades\DB::transaction(function () use ($request, $lease) {
+            $data = $request->validated();
 
-        return (new LeaseResource($lease->load(['room.property', 'tenant'])))->response();
+            // 1. Cập nhật thông tin chính của hợp đồng (Loại bỏ key 'services' để tránh lỗi SQL)
+            $leaseData = \Illuminate\Support\Arr::except($data, ['services']);
+            if (!empty($leaseData)) {
+                $lease->update($leaseData);
+            }
+
+            // 2. Xử lý cập nhật danh sách dịch vụ đi kèm
+            if ($request->has('services')) {
+                // Xóa sạch dịch vụ cũ của hợp đồng này
+                $lease->serviceItems()->delete();
+
+                // Insert lại danh sách dịch vụ mới (nếu có)
+                if (!empty($data['services'])) {
+                    foreach ($data['services'] as $service) {
+                        $lease->serviceItems()->create([
+                            'service_type' => $service['service_type'],
+                            'quantity'     => $service['quantity'],
+                            'custom_price' => $service['custom_price'] ?? null,
+                        ]);
+                    }
+                }
+            }
+        });
+
+        // Load lại các quan hệ cần thiết, bao gồm cả serviceItems để trả về FE
+        return (new LeaseResource($lease->fresh(['room.property', 'tenant', 'serviceItems'])))->response();
     }
 
     /**
@@ -97,7 +122,7 @@ class LeaseController extends Controller
     public function end(Request $request, int $id): JsonResponse
     {
         $lease = Lease::with('room')
-            ->whereHas('room.property', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->whereHas('room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
         $lease = $this->leaseService->endLease($lease);
@@ -112,7 +137,7 @@ class LeaseController extends Controller
     public function destroy(Request $request, int $id): JsonResponse
     {
         $lease = Lease::with('room')
-            ->whereHas('room.property', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->whereHas('room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
         // Kiểm tra chưa có hóa đơn nào được tạo
@@ -150,7 +175,7 @@ class LeaseController extends Controller
         ]);
 
         $lease = Lease::with('members')
-            ->whereHas('room.property', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->whereHas('room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
         // Chỉ đổi khi hợp đồng đang active

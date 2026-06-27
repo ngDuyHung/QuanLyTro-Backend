@@ -28,17 +28,29 @@ class StoreServicePriceRequest extends FormRequest
      */
     public function rules(): array
     {
+        $userId = $this->user()?->id;
+
         return [
-            'property_id'     => ['nullable', 'exists:properties,id'],
-            'service_type'   => [
+            'property_id' => [
+                'nullable',
+                'integer',
+                // Vá bảo mật: Khu nhà bắt buộc phải thuộc về chủ trọ đang đăng nhập
+                Rule::exists('properties', 'id')->where('user_id', $userId)
+            ],
+            'service_type' => [
                 'required',
-                new Enum(ServiceType::class),
-                Rule::unique('service_prices', 'service_type')
-                    ->where('property_id', $this->input('property_id')),
+                new \Illuminate\Validation\Rules\Enum(\App\Enums\ServiceType::class),
+                // Vá logic trùng lặp: Xử lý mệnh đề unique khôn ngoan cho cả trường hợp null và có ID
+                Rule::unique('service_prices', 'service_type')->where(function ($query) {
+                    if ($this->filled('property_id')) {
+                        return $query->where('property_id', $this->input('property_id'));
+                    }
+                    return $query->whereNull('property_id');
+                }),
             ],
             'unit_price'     => ['required', 'integer', 'min:0'],
             'free_units'     => ['nullable', 'integer', 'min:0'],
-            'free_unit_type' => ['nullable', new Enum(FreeUnitType::class)],
+            'free_unit_type' => ['nullable', new \Illuminate\Validation\Rules\Enum(\App\Enums\FreeUnitType::class)],
             'effective_date' => ['required', 'date'],
             'expiry_date'    => ['nullable', 'date', 'after_or_equal:effective_date'],
             'note'           => ['nullable', 'string', 'max:255'],

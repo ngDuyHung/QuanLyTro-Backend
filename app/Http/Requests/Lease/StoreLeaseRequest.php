@@ -32,6 +32,11 @@ class StoreLeaseRequest extends FormRequest
             'tenant.id_card_number'        => ['required', 'string', 'max:20', 'unique:tenants,id_card_number'],
             'tenant.id_card_front_image'   => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'tenant.id_card_back_image'    => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+
+            'services'                      => ['nullable', 'array'],
+            'services.*.service_type'       => ['required', 'string', new \Illuminate\Validation\Rules\Enum(\App\Enums\ServiceType::class)],
+            'services.*.quantity'           => ['required', 'integer', 'min:1'],
+            'services.*.custom_price'       => ['nullable', 'integer', 'min:0'],
         ];
     }
 
@@ -69,6 +74,9 @@ class StoreLeaseRequest extends FormRequest
             'tenant.id_card_back_image.image'      => 'Ảnh mặt sau CCCD phải là file hình ảnh.',
             'tenant.id_card_back_image.mimes'      => 'Ảnh mặt sau CCCD chỉ chấp nhận: jpg, jpeg, png, webp.',
             'tenant.id_card_back_image.max'        => 'Ảnh mặt sau CCCD không được vượt quá 2MB.',
+            'services.*.service_type'              => 'loại dịch vụ không hợp lệ.',
+            'services.*.quantity'                  => 'số lượng phải là số nguyên và tối thiểu là 1.',
+            'services.*.custom_price'              => 'giá thỏa thuận phải là số nguyên và không âm.',
         ];
     }
 
@@ -87,6 +95,9 @@ class StoreLeaseRequest extends FormRequest
             'tenant.id_card_number'      => 'số CCCD/CMND',
             'tenant.id_card_front_image' => 'ảnh mặt trước CCCD',
             'tenant.id_card_back_image'  => 'ảnh mặt sau CCCD',
+            'services.*.service_type'    => 'loại dịch vụ',
+            'services.*.quantity'        => 'số lượng',
+            'services.*.custom_price'    => 'giá thỏa thuận',
         ];
     }
 
@@ -106,4 +117,3 @@ class StoreLeaseRequest extends FormRequest
         }
     }
 }
-

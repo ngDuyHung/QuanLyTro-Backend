@@ -87,9 +87,17 @@ class Lease extends Model
         $query->where('status', LeaseStatus::Active);
     }
 
- 
+
     public function roomResidents(): HasMany
     {
         return $this->hasMany(RoomResident::class);
+    }
+
+    /**
+     * Các dịch vụ cố định được đăng ký sử dụng trong hợp đồng này.
+     */
+    public function serviceItems(): HasMany
+    {
+        return $this->hasMany(LeaseServiceItem::class, 'lease_id');
     }
 }

@@ -33,7 +33,7 @@ class LeaseService
             return DB::transaction(function () use ($data, $userId, &$createdTenantId): Lease {
                 $room = Room::whereHas(
                     'property',
-                    fn ($query) => $query->where('user_id', $userId)
+                    fn($query) => $query->where('user_id', $userId)
                 )->findOrFail($data['room_id']);
 
                 if (!$room->status->isAvailable()) {
@@ -87,10 +87,23 @@ class LeaseService
                     'reading_date' => $data['start_date'],
                 ]);
 
+                // Tạo các dịch vụ kèm theo hợp đồng nếu có
+                if (!empty($data['services'])) {
+                    foreach ($data['services'] as $service) {
+                        $lease->serviceItems()->create([
+                            'service_type' => $service['service_type'],
+                            'quantity'     => $service['quantity'],
+                            'custom_price' => $service['custom_price'] ?? null,
+                        ]);
+                    }
+                }
+                // ------------------------------------
+
                 return $lease->load([
                     'room.property',
                     'tenant.currentResidence.room.property',
                     'tenant.currentResidence.lease',
+                    'serviceItems',
                 ]);
             });
         } catch (Throwable $exception) {

@@ -80,6 +80,16 @@ class LeaseResource extends JsonResource
                     'billing_month' => $invoice->billing_month,
                 ])
             ),
+
+            'service_items' => $this->whenLoaded('serviceItems', function () {
+                return $this->serviceItems->map(fn($item) => [
+                    'id'                 => $item->id,
+                    'service_type'       => $item->service_type->value,
+                    'service_type_label' => $item->service_type->label(),
+                    'quantity'           => $item->quantity,
+                    'custom_price'       => $item->custom_price,
+                ]);
+            }),
         ];
     }
 }
