@@ -87,13 +87,20 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('leases/{id}/export-pdf', [SettingController::class, 'exportLeasePdf']);
 
     // ── Service Prices (Giá dịch vụ) ───────────────────────────────────────
-    Route::get('service-prices', [ServicePriceController::class, 'indexGlobal'])->name('service-prices.index-global'); // Danh sách giá mặc định (property_id = null)
-    Route::get('properties/{propertyId}/service-prices', [ServicePriceController::class, 'index'])->name('service-prices.index'); // Giá áp dụng cho khu nhà (riêng + fallback mặc định)
+
+    // 1. Đặt các route không có tham số động (hoặc tiền tố đặc biệt) lên đầu tiên
+    Route::get('service-prices/global', [ServicePriceController::class, 'indexGlobal'])->name('service-prices.index-global');
+    Route::get('properties/{propertyId}/service-prices', [ServicePriceController::class, 'index'])->name('service-prices.index');
+
+    // 2. Định nghĩa các thao tác CRUD chuẩn có chứa tham số {id} ở phía sau
     Route::post('service-prices', [ServicePriceController::class, 'store'])->name('service-prices.store');
+
+    // 3. Nới lỏng kiểu dữ liệu nhận vào (chuyển int thành string) trong Controller (như hướng dẫn ở bước trước) 
+    // để Laravel truyền mượt mà chuỗi số vào rồi ép kiểu, tránh lỗi declare(strict_types=1);
     Route::get('service-prices/{id}', [ServicePriceController::class, 'show'])->name('service-prices.show');
     Route::put('service-prices/{id}', [ServicePriceController::class, 'update'])->name('service-prices.update');
     Route::delete('service-prices/{id}', [ServicePriceController::class, 'destroy'])->name('service-prices.destroy');
-
+    
     // ── Meter Readings (Chỉ số tiêu thụ) ─────────────────────────────────
     Route::get('leases/{leaseId}/readings',  [MeterReadingController::class, 'index'])->name('leases.readings.index');
     Route::post('leases/{leaseId}/readings', [MeterReadingController::class, 'store'])->name('leases.readings.store');

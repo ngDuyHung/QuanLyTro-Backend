@@ -31,6 +31,9 @@ return new class extends Migration
             $table->unsignedBigInteger('deposit')
                 ->default(0)
                 ->comment('Tiền cọc (VND)');
+            $table->unsignedBigInteger('rent_price')
+                ->default(0)
+                ->comment('Giá thuê phòng (VND)');
             $table->date('move_out_notice_date')->nullable()
                 ->comment('Ngày khách thông báo trả phòng');
             $table->enum('status', ['active', 'ended'])

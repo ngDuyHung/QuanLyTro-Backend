@@ -62,6 +62,24 @@ class PropertyController extends Controller
 
             $property = Property::create($data);
 
+            // Xử lý tạo giá dịch vụ riêng cho khu nhà
+            if (!empty($data['services'])) { // Sửa $validated thành $data
+                $servicePricesData = collect($data['services'])->map(function ($service) use ($property) {
+                    return [
+                        'property_id'    => $property->id,
+                        'service_type'   => $service['service_type'],
+                        'unit_price'     => $service['unit_price'],
+                        'free_units'     => $service['free_units'] ?? 0,
+                        'free_unit_type' => $service['free_unit_type'] ?? null,
+                        'effective_date' => now()->toDateString(),
+                    ];
+                })->toArray();
+
+                // Insert nhiều record cùng lúc để tối ưu hiệu suất
+                $property->servicePrices()->createMany($servicePricesData);
+            }
+
+
             if ($request->hasFile('cover_image')) {
                 $storedPath = $request
                     ->file('cover_image')
@@ -111,7 +129,29 @@ class PropertyController extends Controller
                 $data['cover_image_path'] = $newStoredPath;
             }
 
+            // Cập nhật thông tin cơ bản
             $property->update($data);
+
+            // --- BẮT ĐẦU ĐOẠN XỬ LÝ DỊCH VỤ ---
+            if (isset($data['services'])) {
+                $submittedTypes = collect($data['services'])->pluck('service_type')->toArray();
+
+                // 1. Xóa các dịch vụ mà user đã bấm nút "Thùng rác" (bỏ tick)
+                $property->servicePrices()->whereNotIn('service_type', $submittedTypes)->delete();
+
+                // 2. Thêm mới hoặc Cập nhật giá các dịch vụ còn lại
+                foreach ($data['services'] as $svc) {
+                    $property->servicePrices()->updateOrCreate(
+                        ['service_type' => $svc['service_type']], // Tìm theo loại dịch vụ
+                        [
+                            'unit_price'     => $svc['unit_price'],
+                            'free_units'     => $svc['free_units'] ?? 0,
+                            'free_unit_type' => $svc['free_unit_type'] ?? null,
+                            'effective_date' => now()->toDateString(),
+                        ]
+                    );
+                }
+            }
 
             DB::commit();
 

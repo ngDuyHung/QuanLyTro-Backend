@@ -48,6 +48,12 @@ class StorePropertyRequest extends FormRequest
             'cover_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
 
             'description' => ['nullable', 'string', 'max:1000'],
+
+            'services'                  => ['nullable', 'array'],
+            'services.*.service_type'   => ['required', 'string', new Enum(\App\Enums\ServiceType::class)],
+            'services.*.unit_price'     => ['required', 'integer', 'min:0'],
+            'services.*.free_units'     => ['nullable', 'integer', 'min:0'],
+            'services.*.free_unit_type' => ['nullable', new Enum(\App\Enums\FreeUnitType::class)],
         ];
     }
 
@@ -91,6 +97,15 @@ class StorePropertyRequest extends FormRequest
             'cover_image.max' => 'Ảnh đại diện không được vượt quá 4MB.',
 
             'description.max' => 'Mô tả không vượt quá 1000 ký tự.',
+
+            'services.*.service_type.required' => 'Loại dịch vụ không được để trống.',
+            'services.*.service_type.enum' => 'Loại dịch vụ không hợp lệ.',
+            'services.*.unit_price.required' => 'Đơn giá dịch vụ không được để trống.',
+            'services.*.unit_price.integer' => 'Đơn giá dịch vụ phải là số nguyên.',
+            'services.*.unit_price.min' => 'Đơn giá dịch vụ không được nhỏ hơn 0.',
+            'services.*.free_units.integer' => 'Số lượng miễn phí phải là số nguyên.',
+            'services.*.free_units.min' => 'Số lượng miễn phí không được nhỏ hơn 0.',
+            'services.*.free_unit_type.enum' => 'Loại đơn vị miễn phí không hợp lệ.',
         ];
     }
 
@@ -109,6 +124,10 @@ class StorePropertyRequest extends FormRequest
             'longitude' => 'kinh độ',
             'cover_image' => 'ảnh đại diện',
             'description' => 'mô tả',
+            'services.*.service_type' => 'loại dịch vụ',
+            'services.*.unit_price' => 'đơn giá dịch vụ',
+            'services.*.free_units' => 'số lượng miễn phí',
+            'services.*.free_unit_type' => 'loại đơn vị miễn phí',
         ];
     }
 
