@@ -23,6 +23,7 @@ class Lease extends Model
         'end_date',
         'billing_day',
         'deposit',
+        'room_price',
         'move_out_notice_date',
         'status',
     ];
@@ -32,6 +33,7 @@ class Lease extends Model
         'end_date'             => 'date',
         'billing_day'          => 'integer',
         'deposit'              => 'integer',
+        'room_price'           => 'integer',
         'move_out_notice_date' => 'date',
         'status'               => LeaseStatus::class,
         'created_at'           => 'datetime',

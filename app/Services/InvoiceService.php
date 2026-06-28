@@ -424,44 +424,46 @@ class InvoiceService
             ];
         }
 
+        
         // 3. TỰ ĐỘNG TÍNH TOÁN CÁC DỊCH VỤ CỐ ĐỊNH ĐÃ ĐĂNG KÝ THEO HỢP ĐỒNG
-        // Gọi hàm Helper từ Bước 5 để bốc bảng giá chuẩn
         $applicablePrices = ServicePrice::getApplicablePrices($propertyId);
 
         foreach ($lease->serviceItems as $serviceItem) {
             $type = $serviceItem->service_type->value;
             $priceRule = $applicablePrices->get($type);
 
-            if ($priceRule) {
-                // Thứ tự ưu tiên: Giá thỏa thuận riêng trong HĐ -> Giá cấu hình khu/hệ thống
-                $unitPrice = $serviceItem->custom_price ?? $priceRule->unit_price; //đây là giá tiền của dịch vụ theo hợp đồng hoặc giá mặc định
-                $quantity = $serviceItem->quantity; // số lượng dịch vụ theo hợp đồng
-                $freeUnits = 0;
-                if ($priceRule->free_units > 0 && $priceRule->free_unit_type !== 'none') {
-                    // Lấy số người trong phòng nếu cần
-                    $memberCount = $serviceItem->free_unit_type === 'per_person'
-                        ? ($lease->members()->count() + 1) // +1 người đại diện
-                        : 1;
+            // 1. Xác định đơn giá: Ưu tiên giá thỏa thuận trong HĐ -> Giá cấu hình -> 0đ
+            $unitPrice = $serviceItem->custom_price ?? ($priceRule ? $priceRule->unit_price : 0);
+            $quantity = $serviceItem->quantity;
+            $freeUnits = 0;
 
-                    $freeUnits = $priceRule->free_units * (
-                        $priceRule->free_unit_type === 'per_person' ? $memberCount : 1
-                    );
-                }
+            // 2. Tính số lượng miễn phí (Chỉ tính nếu có cấu hình Price Rule)
+            if ($priceRule && $priceRule->free_units > 0 && $priceRule->free_unit_type !== 'none') {
+                $memberCount = $serviceItem->free_unit_type === 'per_person'
+                    ? ($lease->members()->count() + 1) // +1 người đại diện
+                    : 1;
 
-                $billableQuantity = max(0, $serviceItem->quantity - $freeUnits);
-                $amount = $unitPrice * $billableQuantity;
-
-                $items[] = [
-                    'service_price_id' => $priceRule->id,
-                    'charge_type' => $type,
-                    'description' => 'Tiền ' . mb_strtolower($serviceRuleDescription ?? $serviceItem->service_type->label()),
-                    'unit' => 'Tháng/Lần',
-                    'free_quantity_snapshot' => $freeUnits, // số lượng miễn phí theo bảng giá
-                    'quantity' => $quantity,
-                    'unit_price_snapshot' => $unitPrice,
-                    'amount' => $amount,
-                ];
+                $freeUnits = $priceRule->free_units * (
+                    $priceRule->free_unit_type === 'per_person' ? $memberCount : 1
+                );
             }
+
+            // 3. Tính thành tiền
+            $billableQuantity = max(0, $quantity - $freeUnits);
+            $amount = $unitPrice * $billableQuantity;
+
+            // 4. Đẩy vào mảng (Bỏ điều kiện if ($priceRule) để không bị sót dịch vụ)
+            $items[] = [
+                'service_price_id' => $priceRule ? $priceRule->id : null,
+                'charge_type' => $type,
+                // Sửa lỗi Undefined variable tại đây:
+                'description' => 'Tiền ' . mb_strtolower($serviceItem->service_type->label()),
+                'unit' => 'Tháng/Lần',
+                'free_quantity_snapshot' => $freeUnits,
+                'quantity' => $quantity,
+                'unit_price_snapshot' => $unitPrice,
+                'amount' => $amount,
+            ];
         }
 
         return [

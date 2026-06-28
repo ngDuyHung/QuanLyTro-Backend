@@ -19,6 +19,7 @@ class LeaseResource extends JsonResource
             'end_date'             => $this->end_date?->toDateString(),
             'billing_day'          => $this->billing_day,
             'deposit'              => $this->deposit,
+            'room_price'           => $this->room_price,
             'move_out_notice_date' => $this->move_out_notice_date?->toDateString(),
             'status'               => $this->status?->value,
             'status_label'         => $this->status?->label(),
