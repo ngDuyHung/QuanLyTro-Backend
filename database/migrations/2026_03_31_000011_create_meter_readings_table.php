@@ -32,6 +32,8 @@ return new class extends Migration
                 ->comment('Chỉ số mới');
             $table->string('meter_image', 500)->nullable()
                 ->comment('URL ảnh đồng hồ');
+            $table->text('note')->nullable()
+                ->comment('Ghi chú về chỉ số');
             $table->date('reading_date')
                 ->comment('Ngày chốt chỉ số');
             $table->timestamp('created_at')->useCurrent()

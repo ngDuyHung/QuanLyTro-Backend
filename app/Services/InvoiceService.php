@@ -434,15 +434,29 @@ class InvoiceService
 
             if ($priceRule) {
                 // Thứ tự ưu tiên: Giá thỏa thuận riêng trong HĐ -> Giá cấu hình khu/hệ thống
-                $unitPrice = $serviceItem->custom_price ?? $priceRule->unit_price;
-                $quantity = $serviceItem->quantity;
-                $amount = $unitPrice * $quantity;
+                $unitPrice = $serviceItem->custom_price ?? $priceRule->unit_price; //đây là giá tiền của dịch vụ theo hợp đồng hoặc giá mặc định
+                $quantity = $serviceItem->quantity; // số lượng dịch vụ theo hợp đồng
+                $freeUnits = 0;
+                if ($priceRule->free_units > 0 && $priceRule->free_unit_type !== 'none') {
+                    // Lấy số người trong phòng nếu cần
+                    $memberCount = $serviceItem->free_unit_type === 'per_person'
+                        ? ($lease->members()->count() + 1) // +1 người đại diện
+                        : 1;
+
+                    $freeUnits = $priceRule->free_units * (
+                        $priceRule->free_unit_type === 'per_person' ? $memberCount : 1
+                    );
+                }
+
+                $billableQuantity = max(0, $serviceItem->quantity - $freeUnits);
+                $amount = $unitPrice * $billableQuantity;
 
                 $items[] = [
                     'service_price_id' => $priceRule->id,
                     'charge_type' => $type,
                     'description' => 'Tiền ' . mb_strtolower($serviceRuleDescription ?? $serviceItem->service_type->label()),
                     'unit' => 'Tháng/Lần',
+                    'free_quantity_snapshot' => $freeUnits, // số lượng miễn phí theo bảng giá
                     'quantity' => $quantity,
                     'unit_price_snapshot' => $unitPrice,
                     'amount' => $amount,

@@ -31,5 +31,11 @@ class DatabaseSeeder extends Seeder
             ]
         );
         $admin->syncRoles(['admin']);
+
+        // THÊM ĐOẠN NÀY ĐỂ GỌI 2 SEEDER CÒN LẠI
+        $this->call([
+            SettingSeeder::class,
+            ServicePriceSeeder::class,
+        ]);
     }
 }

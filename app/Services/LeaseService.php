@@ -69,6 +69,13 @@ class LeaseService
                     'status' => RoomStatus::Occupied->value,
                 ]);
 
+                // Lưu ảnh điện (nếu có)
+                $electricityImagePath = null;
+                if (isset($data['electricity_image']) && $data['electricity_image'] instanceof \Illuminate\Http\UploadedFile) {
+                    $ext = $data['electricity_image']->extension();
+                    $electricityImagePath = $data['electricity_image']->storeAs("utilities/lease_{$lease->id}", "electricity_" . time() . ".{$ext}", 'public');
+                }
+
                 // Tạo chỉ số ban đầu cho hợp đồng mới cho điện và nước bằng giá trị current_reading = previous_reading = chỉ số đầu vào từ request
                 // vì mới vào nếu phải cho nó bằng nhau để tính ra 0đ hóa đơn vì thu đầu vào không tính điện nước. 
                 MeterReading::create([
@@ -77,7 +84,16 @@ class LeaseService
                     'previous_reading' => $data['electricity_reading'], //Cho previous_reading = current_reading 
                     'current_reading' => $data['electricity_reading'],
                     'reading_date' => $data['start_date'],
+                    'meter_image' => $electricityImagePath,
+                    'note' => 'Chỉ số điện ban đầu khi nhận phòng.',
                 ]);
+
+                // Lưu ảnh nước (nếu có)
+                $waterImagePath = null;
+                if (isset($data['water_image']) && $data['water_image'] instanceof \Illuminate\Http\UploadedFile) {
+                    $ext = $data['water_image']->extension();
+                    $waterImagePath = $data['water_image']->storeAs("utilities/lease_{$lease->id}", "water_" . time() . ".{$ext}", 'public');
+                }
 
                 MeterReading::create([
                     'lease_id' => $lease->id,
@@ -85,6 +101,8 @@ class LeaseService
                     'previous_reading' => $data['water_reading'], //Cho previous_reading = current_reading
                     'current_reading' => $data['water_reading'],
                     'reading_date' => $data['start_date'],
+                    'meter_image' => $waterImagePath,
+                    'note' => 'Chỉ số nước ban đầu khi nhận phòng.',
                 ]);
 
                 // Tạo các dịch vụ kèm theo hợp đồng nếu có

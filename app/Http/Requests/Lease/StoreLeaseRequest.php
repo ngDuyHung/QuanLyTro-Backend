@@ -23,6 +23,8 @@ class StoreLeaseRequest extends FormRequest
             'deposit'             => ['nullable', 'integer', 'min:0'],
             'electricity_reading' => ['required', 'integer', 'min:0'],
             'water_reading'       => ['required', 'integer', 'min:0'],
+            'electricity_image'   => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+            'water_image'         => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
 
             // ── Thông tin khách thuê (tạo mới cùng lúc) ─────────────────
             'tenant'                       => ['required', 'array'],
@@ -37,6 +39,7 @@ class StoreLeaseRequest extends FormRequest
             'services.*.service_type'       => ['required', 'string', new \Illuminate\Validation\Rules\Enum(\App\Enums\ServiceType::class)],
             'services.*.quantity'           => ['required', 'integer', 'min:1'],
             'services.*.custom_price'       => ['nullable', 'integer', 'min:0'],
+
         ];
     }
 
@@ -59,6 +62,15 @@ class StoreLeaseRequest extends FormRequest
             'water_reading.required'               => 'Chỉ số nước ban đầu không được để trống.',
             'water_reading.integer'                => 'Chỉ số nước phải là số nguyên.',
             'water_reading.min'                    => 'Chỉ số nước không được âm.',
+
+            'electricity_image.image'              => 'Ảnh đồng hồ điện phải là định dạng hình ảnh.',
+            'electricity_image.mimes'              => 'Ảnh đồng hồ điện chỉ chấp nhận: jpg, jpeg, png, webp.',
+            'electricity_image.max'                => 'Ảnh đồng hồ điện không được vượt quá 4MB.',
+            'water_image.image'                    => 'Ảnh đồng hồ nước phải là định dạng hình ảnh.',
+            'water_image.mimes'                    => 'Ảnh đồng hồ nước chỉ chấp nhận: jpg, jpeg, png, webp.',
+            'water_image.max'                      => 'Ảnh đồng hồ nước không được vượt quá 4MB.',
+
+
             'tenant.required'                      => 'Thông tin khách thuê không được để trống.',
             'tenant.full_name.required'            => 'Họ và tên khách thuê không được để trống.',
             'tenant.full_name.max'                 => 'Họ và tên không được vượt quá 100 ký tự.',
@@ -77,6 +89,8 @@ class StoreLeaseRequest extends FormRequest
             'services.*.service_type'              => 'loại dịch vụ không hợp lệ.',
             'services.*.quantity'                  => 'số lượng phải là số nguyên và tối thiểu là 1.',
             'services.*.custom_price'              => 'giá thỏa thuận phải là số nguyên và không âm.',
+
+
         ];
     }
 
@@ -89,6 +103,10 @@ class StoreLeaseRequest extends FormRequest
             'deposit'                    => 'tiền cọc',
             'electricity_reading'        => 'chỉ số điện ban đầu',
             'water_reading'              => 'chỉ số nước ban đầu',
+
+            'electricity_image'          => 'ảnh đồng hồ điện',
+            'water_image'                => 'ảnh đồng hồ nước',
+
             'tenant.full_name'           => 'họ và tên khách thuê',
             'tenant.email'               => 'email khách thuê',
             'tenant.phone'               => 'số điện thoại khách thuê',

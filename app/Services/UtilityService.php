@@ -37,6 +37,7 @@ class UtilityService
             'previous_reading' => $previousReading,
             'current_reading' => $data['current_reading'],
             'reading_date' => $data['reading_date'],
+            'note' => $data['note'] ?? null,
         ]);
 
         // 3. Xử lý lưu ảnh
