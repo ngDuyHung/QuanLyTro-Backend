@@ -26,6 +26,7 @@ class Lease extends Model
         'room_price',
         'move_out_notice_date',
         'status',
+        'note',
     ];
 
     protected $casts = [
@@ -36,6 +37,7 @@ class Lease extends Model
         'room_price'           => 'integer',
         'move_out_notice_date' => 'date',
         'status'               => LeaseStatus::class,
+        'note'                 => 'string',
         'created_at'           => 'datetime',
         'updated_at'           => 'datetime',
     ];

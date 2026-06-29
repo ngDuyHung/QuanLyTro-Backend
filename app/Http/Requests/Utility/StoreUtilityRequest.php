@@ -36,6 +36,7 @@ class StoreUtilityRequest extends FormRequest
             'reading_date.required' => 'Ngày chốt số không được để trống.',
             'meter_image.image' => 'Ảnh đồng hồ phải là định dạng hình ảnh.',
             'meter_image.max' => 'Ảnh đồng hồ không được vượt quá 4MB.',
+            'note.max' => 'Ghi chú không được vượt quá 255 ký tự.',
         ];
     }
 }

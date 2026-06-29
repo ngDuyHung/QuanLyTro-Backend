@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\RoomStatus;
 use App\Exceptions\Domain\BusinessException;
 use App\Models\Room;
+use App\Models\RoomPriceHistory;
+use Exception;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
@@ -38,7 +41,7 @@ class RoomService
         try {
             $deletedImageIds = collect($deletedImageIds)
                 ->filter()
-                ->map(fn ($id) => (int) $id)
+                ->map(fn($id) => (int) $id)
                 ->unique()
                 ->values()
                 ->all();
@@ -215,5 +218,50 @@ class RoomService
         if ($firstImage) {
             $firstImage->update(['is_cover' => true]);
         }
+    }
+
+
+    public function createFromImport(int $propertyId, int $userId, array $data, bool $isFullScenario): Room
+    {
+        $roomName = trim((string)$data['room_name']);
+
+        // Check trùng phòng
+        $roomExists = Room::where('property_id', $propertyId)
+            ->where('name', $roomName)
+            ->exists();
+
+        if ($roomExists) {
+            throw new Exception("Phòng '{$roomName}' đã tồn tại trong khu nhà.");
+        }
+
+        $roomStatus = $isFullScenario ? RoomStatus::Occupied->value : (strtolower(trim((string)$data['room_status'])) ?: RoomStatus::Available->value);
+
+        $room = Room::create([
+            'property_id'   => $propertyId,
+            'name'          => $roomName,
+            'current_price' => (int)$data['room_current_price'],
+            'floor_number'  => $data['room_floor_number'] !== null ? (int)$data['room_floor_number'] : null,
+            'status'        => $roomStatus,
+            'area'          => $data['room_area'] ?? null,
+            'max_occupants' => !empty($data['room_max_occupants']) ? (int)$data['room_max_occupants'] : 0,
+            'billing_day'   => $data['room_billing_day'] ?? null,
+            'allow_shared'  => !empty($data['room_allow_shared']),
+            'is_public'     => !empty($data['room_is_public']),
+            'description'   => $data['room_description'] ?? null,
+        ]);
+
+        // Ghi lịch sử giá nếu là kịch bản đầy đủ
+        if ($isFullScenario && $room->current_price > 0) {
+            RoomPriceHistory::create([
+                'room_id'        => $room->id,
+                'user_id'        => $userId,
+                'old_price'      => 0,
+                'new_price'      => $room->current_price,
+                'effective_date' => $data['lease_start_date'],
+                'note'           => 'Giá khởi tạo khi import hợp đồng.',
+            ]);
+        }
+
+        return $room;
     }
 }

@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\SePayTransactionController;
 use App\Http\Controllers\Api\V1\ServicePriceController;
 use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\FinancialTransactionController;
+use App\Http\Controllers\Api\V1\ImportController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\OcrController;
 use App\Http\Controllers\Api\V1\SepayConfigController;
@@ -100,7 +101,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('service-prices/{id}', [ServicePriceController::class, 'show'])->name('service-prices.show');
     Route::put('service-prices/{id}', [ServicePriceController::class, 'update'])->name('service-prices.update');
     Route::delete('service-prices/{id}', [ServicePriceController::class, 'destroy'])->name('service-prices.destroy');
-    
+
     // ── Meter Readings (Chỉ số tiêu thụ) ─────────────────────────────────
     Route::get('leases/{leaseId}/readings',  [MeterReadingController::class, 'index'])->name('leases.readings.index');
     Route::post('leases/{leaseId}/readings', [MeterReadingController::class, 'store'])->name('leases.readings.store');
@@ -180,6 +181,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     // ROUTE BANK ACCOUNTS VÀO PHẦN PRIVATE
     Route::apiResource('bank-accounts', BankAccountController::class);
+
+    // API Import dữ liệu tổng hợp (Khu nhà, Phòng, Hợp đồng)
+    Route::post('imports/master-data', [ImportController::class, 'importMasterData']);
+    // API Tải file Excel mẫu để điền dữ liệu import
+    Route::get('imports/master-data/template', [ImportController::class, 'downloadTemplate']);
 });
 
 // 1. THÊM ROUTE WEBHOOK VÀO PHẦN PUBLIC (Nằm ngoài auth:sanctum)

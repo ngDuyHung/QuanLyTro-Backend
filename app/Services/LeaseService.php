@@ -13,6 +13,7 @@ use App\Models\LeaseMember;
 use App\Models\MeterReading;
 use App\Models\Room;
 use App\Models\RoomResident;
+use App\Models\Tenant;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -170,5 +171,115 @@ class LeaseService
 
             return $lease->fresh(['room.property', 'tenant']);
         });
+    }
+
+    /**
+     * Khởi tạo hợp đồng và lưu vết cư dân đại diện ban đầu
+     */
+    public function createFromImport(int $roomId, array $data): Lease
+    {
+        $tenant = Tenant::updateOrCreate(
+            ['id_card_number' => trim((string)$data['tenant_id_card_number'])],
+            [
+                'full_name' => trim((string)$data['tenant_full_name']),
+                'phone'     => preg_replace('/\D/', '', (string)$data['tenant_phone']),
+                'email'     => !empty($data['tenant_email']) ? strtolower(trim((string)$data['tenant_email'])) : null,
+            ]
+        );
+
+        $deposit = $data['lease_deposit'] ?? $data['room_current_price'];
+
+        $lease = Lease::create([
+            'room_id'     => $roomId,
+            'tenant_id'   => $tenant->id,
+            'start_date'  => $data['lease_start_date'],
+            'billing_day' => $data['lease_billing_day'] ?? 1,
+            'room_price'  => $data['lease_room_price'],
+            'deposit'     => $deposit,
+            'status'      => 'active',
+        ]);
+
+        // Đã sửa lại đúng cấu trúc trường của bảng lease_members trong SQL (dùng relationship thay vì role)
+        $lease->members()->create([
+            'tenant_id'    => $tenant->id,
+            'relationship' => 'other',
+            'move_in_date' => $data['lease_start_date'],
+        ]);
+
+        \App\Models\RoomResident::create([
+            'room_id'      => $roomId,
+            'tenant_id'    => $tenant->id,
+            'lease_id'     => $lease->id,
+            'role'         => 'representative', // Người đại diện đứng tên phòng
+            'status'       => 'active',
+            'move_in_date' => $data['lease_start_date'],
+            'note'         => 'Hồ sơ cư trú đại diện được tạo tự động từ hệ thống Import Excel.',
+        ]);
+
+        \App\Models\MeterReading::create([
+            'lease_id'         => $lease->id,
+            'type'             => 'electricity',
+            'previous_reading' => (int)$data['lease_electricity_reading'],
+            'current_reading'  => (int)$data['lease_electricity_reading'],
+            'reading_date'     => $data['lease_start_date'],
+            'note'             => 'Chỉ số điện ban đầu (Import)',
+        ]);
+
+        \App\Models\MeterReading::create([
+            'lease_id'         => $lease->id,
+            'type'             => 'water',
+            'previous_reading' => (int)$data['lease_water_reading'],
+            'current_reading'  => (int)$data['lease_water_reading'],
+            'reading_date'     => $data['lease_start_date'],
+            'note'             => 'Chỉ số nước ban đầu (Import)',
+        ]);
+
+        return $lease;
+    }
+
+    /**
+     * 🔥 HÀM MỚI BỔ SUNG: Xử lý thêm Khách Ở Ghép vào Hợp đồng và Phòng đang vận hành
+     */
+    public function addRoommateFromImport(int $roomId, int $leaseId, array $data): void
+    {
+        // 1. Tạo hoặc cập nhật thông tin hồ sơ của người ở ghép
+        $tenant = Tenant::updateOrCreate(
+            ['id_card_number' => trim((string)$data['tenant_id_card_number'])],
+            [
+                'full_name' => trim((string)$data['tenant_full_name']),
+                'phone'     => preg_replace('/\D/', '', (string)$data['tenant_phone']),
+                'email'     => !empty($data['tenant_email']) ? strtolower(trim((string)$data['tenant_email'])) : null,
+            ]
+        );
+
+        // Chặn trùng lặp: Kiểm tra xem người này đã được add vào trạng thái active trong phòng này chưa
+        $residentExists = \App\Models\RoomResident::where('room_id', $roomId)
+            ->where('tenant_id', $tenant->id)
+            ->where('status', 'active')
+            ->exists();
+
+        if ($residentExists) {
+            throw new \Exception("Khách ở ghép '{$tenant->full_name}' bị trùng lặp thông tin dữ liệu trong cùng một phòng.");
+        }
+
+        $lease = Lease::findOrFail($leaseId);
+
+        // 2. Lưu vết thông tin vào bảng thành viên hợp đồng lease_members (Mối quan hệ là bạn bè/ở ghép)
+        $lease->members()->create([
+            'tenant_id'    => $tenant->id,
+            'relationship' => 'friend',
+            'move_in_date' => $data['lease_start_date'],
+        ]);
+
+        // 3. Thiết lập mối quan hệ cư trú thực tế trong bảng room_residents với vai trò 'member'
+        \App\Models\RoomResident::create([
+            'room_id'      => $roomId,
+            'tenant_id'    => $tenant->id,
+            'lease_id'     => $leaseId,
+            'role'         => 'member', // Phân luồng chính xác: Là thành viên ở ghép (member) chứ không phải đại diện
+            'status'       => 'active', // Trạng thái hoạt động trực tiếp trong phòng
+            'move_in_date' => $data['lease_start_date'],
+            'note'         => 'Thành viên ở ghép được đồng bộ tự động từ hệ thống Import Excel.',
+        ]);
     }
 }
