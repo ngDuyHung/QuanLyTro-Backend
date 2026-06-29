@@ -66,9 +66,9 @@ class InvoiceService
                 'property_id' => $lease->room->property_id,
                 'room_id' => $lease->room_id,
 
-                'invoice_code' => $this->generateInvoiceCode($lease->room_id),
+                'invoice_code' => $this->generateInvoiceCode((int)$lease->room_id),
                 'invoice_type' => $invoiceType,
-
+    
                 'period_from' => $data['period_from'],
                 'period_to' => $data['period_to'],
 
