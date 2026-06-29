@@ -403,7 +403,7 @@ class InvoiceService
         ];
 
         // Lấy toàn bộ cấu hình giá dịch vụ của khu trọ
-        $applicablePrices = ServicePrice::getApplicablePrices($propertyId);
+        $applicablePrices = ServicePrice::getApplicablePrices((int)$propertyId);
 
         // Lấy các chỉ số điện/nước chưa lên hóa đơn của kỳ này (nếu đã ghi nhận trước đó)
         $unbilledReadings = MeterReading::where('lease_id', $leaseId)
