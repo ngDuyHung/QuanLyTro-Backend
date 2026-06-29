@@ -234,11 +234,44 @@ class LeaseService
             'note'             => 'Chỉ số nước ban đầu (Import)',
         ]);
 
+        /* |--------------------------------------------------------------------------
+        | BỔ SUNG: TỰ ĐỘNG GÁN DỊCH VỤ ĐI KÈM CHO HỢP ĐỒNG IMPORT
+        | Lấy giá dịch vụ ưu tiên của khu nhà, nếu không có lấy giá global mặc định
+        |--------------------------------------------------------------------------
+        */
+        $room = \App\Models\Room::find($roomId);
+
+        if ($room) {
+            // 1. Lấy giá riêng của khu nhà
+            $propertyPrices = \App\Models\ServicePrice::where('property_id', $room->property_id)
+                ->get()
+                ->keyBy(fn($p) => $p->service_type->value ?? $p->service_type);
+
+            // 2. Lấy giá mặc định (global) cho các loại DV chưa có giá riêng
+            $assignedTypes = $propertyPrices->keys()->all();
+            $globalPrices = \App\Models\ServicePrice::whereNull('property_id')
+                ->when(!empty($assignedTypes), fn($q) => $q->whereNotIn('service_type', $assignedTypes))
+                ->get()
+                ->keyBy(fn($p) => $p->service_type->value ?? $p->service_type);
+
+            // 3. Kết hợp lại thành danh sách dịch vụ áp dụng cho phòng này
+            $mergedPrices = $propertyPrices->merge($globalPrices)->values();
+
+            // 4. Gắn toàn bộ vào hợp đồng mới tạo
+            foreach ($mergedPrices as $service) {
+                $lease->serviceItems()->create([
+                    'service_type' => $service->service_type,
+                    'quantity'     => 1,    // Mặc định gán số lượng là 1 khi import
+                    'custom_price' => $service->unit_price, // Null để hệ thống tự mapping với bảng giá gốc
+                ]);
+            }
+        }
+
         return $lease;
     }
 
     /**
-     * 🔥 HÀM MỚI BỔ SUNG: Xử lý thêm Khách Ở Ghép vào Hợp đồng và Phòng đang vận hành
+     *  HÀM Xử lý thêm Khách Ở Ghép vào Hợp đồng và Phòng đang vận hành
      */
     public function addRoommateFromImport(int $roomId, int $leaseId, array $data): void
     {

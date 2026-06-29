@@ -382,14 +382,14 @@ class InvoiceService
 
     public function prepareInvoiceData(int $leaseId, string $periodTo, int $userId): array
     {
-        $lease = Lease::with(['room.property', 'tenant', 'serviceItems'])
+        $lease = Lease::with(['room.property', 'tenant', 'serviceItems', 'members'])
             ->whereHas('room.property', fn($q) => $q->where('user_id', $userId))
             ->findOrFail($leaseId);
 
         $items = [];
         $propertyId = $lease->room->property_id;
 
-        // 1. Tiền phòng cố định (Khớp loại khoản phí là 'room' theo StoreInvoiceRequest)
+        // 1. Tiền phòng cố định
         $items[] = [
             'charge_type' => 'room',
             'description' => 'Tiền phòng',
@@ -397,72 +397,87 @@ class InvoiceService
             'quantity' => 1,
             'unit_price_snapshot' => $lease->room->current_price,
             'amount' => $lease->room->current_price,
+            'is_utility' => false,
         ];
 
-        // 2. Chỉ số Điện & Nước chưa chốt hóa đơn (Giữ nguyên logic của bạn)
+        // Lấy toàn bộ cấu hình giá dịch vụ của khu trọ
+        $applicablePrices = ServicePrice::getApplicablePrices($propertyId);
+
+        // Lấy các chỉ số điện/nước chưa lên hóa đơn của kỳ này (nếu đã ghi nhận trước đó)
         $unbilledReadings = MeterReading::where('lease_id', $leaseId)
             ->whereNull('invoice_id')
             ->where('reading_date', '<=', $periodTo)
-            ->get();
+            ->get()
+            ->keyBy('type');
 
-        foreach ($unbilledReadings as $reading) {
-            $usage = max(0, $reading->current_reading - $reading->previous_reading);
-            $enumType = is_string($reading->type) ? ServiceType::from($reading->type) : $reading->type;
-
-            $items[] = [
-                'charge_type' => $enumType->value,
-                'description' => sprintf(
-                    'Tiền %s (Số cũ: %s - Số mới: %s)',
-                    mb_strtolower($enumType->label()),
-                    $reading->previous_reading,
-                    $reading->current_reading
-                ),
-                'unit' => $enumType->value === 'electricity' ? 'kWh' : 'm³',
-                'quantity' => $usage,
-                'unit_price_snapshot' => 0, // FE sẽ tự động mapping giá sau khi lấy cục diện này
-                'amount' => 0,
-            ];
-        }
-
-        
-        // 3. TỰ ĐỘNG TÍNH TOÁN CÁC DỊCH VỤ CỐ ĐỊNH ĐÃ ĐĂNG KÝ THEO HỢP ĐỒNG
-        $applicablePrices = ServicePrice::getApplicablePrices($propertyId);
-
+        // 2. TỰ ĐỘNG TÍNH TOÁN CÁC DỊCH VỤ ĐÃ ĐĂNG KÝ THEO HỢP ĐỒNG (Gộp xử lý chỉ số vào đây)
         foreach ($lease->serviceItems as $serviceItem) {
             $type = $serviceItem->service_type->value;
             $priceRule = $applicablePrices->get($type);
 
-            // 1. Xác định đơn giá: Ưu tiên giá thỏa thuận trong HĐ -> Giá cấu hình -> 0đ
+            // Xác định đơn giá dịch vụ
             $unitPrice = $serviceItem->custom_price ?? ($priceRule ? $priceRule->unit_price : 0);
             $quantity = $serviceItem->quantity;
             $freeUnits = 0;
 
-            // 2. Tính số lượng miễn phí (Chỉ tính nếu có cấu hình Price Rule)
-            if ($priceRule && $priceRule->free_units > 0 && $priceRule->free_unit_type !== 'none') {
-                $memberCount = $serviceItem->free_unit_type === 'per_person'
-                    ? ($lease->members()->count() + 1) // +1 người đại diện
-                    : 1;
+            // Các biến bổ sung để phục vụ điện nước có cấu trúc
+            $previousReading = null;
+            $currentReading = null;
+            $isChotRoi = false;
+            $isUtility = in_array($type, ['electricity', 'water']);
 
-                $freeUnits = $priceRule->free_units * (
-                    $priceRule->free_unit_type === 'per_person' ? $memberCount : 1
-                );
+            if ($isUtility) {
+                // TRƯỜNG HỢP LÀ ĐIỆN / NƯỚC
+                if ($unbilledReadings->has($type)) {
+                    // Nếu ĐÃ chốt số trước đó ở màn hình Tiện ích
+                    $reading = $unbilledReadings->get($type);
+                    $previousReading = $reading->previous_reading;
+                    $currentReading = $reading->current_reading;
+                    $quantity = max(0, $currentReading - $previousReading);
+                    $isChotRoi = true;
+                } else {
+                    // Nếu CHƯA chốt số -> Tự động truy vết số cũ gần nhất trong lịch sử
+                    $lastReading = MeterReading::where('lease_id', $leaseId)
+                        ->where('type', $type)
+                        ->orderByDesc('reading_date')
+                        ->orderByDesc('id')
+                        ->first();
+
+                    $previousReading = $lastReading ? $lastReading->current_reading : 0;
+                    $currentReading = ''; // Để trống cho khách tự nhập số mới trên UI
+                    $quantity = 0;
+                    $isChotRoi = false;
+                }
+                $amount = $unitPrice * $quantity;
+            } else {
+                // TRƯỜNG HỢP CÁC DỊCH VỤ KHÁC (Rác, mạng, xe...)
+                if ($priceRule && $priceRule->free_units > 0 && $priceRule->free_unit_type !== 'none') {
+                    $memberCount = $priceRule->free_unit_type === 'per_person'
+                        ? ($lease->members()->count() + 1)
+                        : 1;
+
+                    $freeUnits = $priceRule->free_units * $memberCount;
+                }
+                $billableQuantity = max(0, $quantity - $freeUnits);
+                $amount = $unitPrice * $billableQuantity;
             }
 
-            // 3. Tính thành tiền
-            $billableQuantity = max(0, $quantity - $freeUnits);
-            $amount = $unitPrice * $billableQuantity;
-
-            // 4. Đẩy vào mảng (Bỏ điều kiện if ($priceRule) để không bị sót dịch vụ)
+            // Đẩy vào danh sách gợi ý duy nhất 1 dòng cho mỗi loại phí
             $items[] = [
                 'service_price_id' => $priceRule ? $priceRule->id : null,
                 'charge_type' => $type,
-                // Sửa lỗi Undefined variable tại đây:
                 'description' => 'Tiền ' . mb_strtolower($serviceItem->service_type->label()),
-                'unit' => 'Tháng/Lần',
+                'unit' => $type === 'electricity' ? 'kWh' : ($type === 'water' ? 'm³' : 'Tháng/Lần'),
                 'free_quantity_snapshot' => $freeUnits,
                 'quantity' => $quantity,
                 'unit_price_snapshot' => $unitPrice,
                 'amount' => $amount,
+
+                // Trả thêm cấu trúc rõ ràng sang Frontend
+                'is_utility' => $isUtility,
+                'previous_reading' => $previousReading,
+                'current_reading' => $currentReading,
+                'is_chot_roi' => $isChotRoi,
             ];
         }
 

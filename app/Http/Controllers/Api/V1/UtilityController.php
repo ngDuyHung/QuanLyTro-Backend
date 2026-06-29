@@ -30,6 +30,7 @@ class UtilityController extends Controller
             'lease.tenant:id,full_name'
         ])
             ->whereHas('lease.room.property', fn($q) => $q->where('user_id', $request->user()->id))
+            ->when($request->lease_id, fn($q) => $q->where('lease_id', $request->lease_id))
             ->when($request->property_id, fn($q) => $q->whereHas('lease.room', fn($r) => $r->where('property_id', $request->property_id)))
             ->when($request->room_id, fn($q) => $q->whereHas('lease', fn($l) => $l->where('room_id', $request->room_id)))
             ->when($request->type, fn($q) => $q->where('type', $request->type))

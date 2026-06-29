@@ -15,7 +15,7 @@ class PropertyService
 {
     public function firstOrCreateFromImport(int $userId, string $propertyCode, array $data): Property
     {
-        return Property::firstOrCreate(
+        $property = Property::firstOrCreate(
             ['user_id' => $userId, 'code' => $propertyCode],
             [
                 'property_type'        => strtolower(trim((string)$data['property_type'])),
@@ -30,5 +30,27 @@ class PropertyService
                 'description'          => $data['property_description'] ?? null,
             ]
         );
+
+        /* |--------------------------------------------------------------------------
+        | BỔ SUNG: TỰ ĐỘNG KHỞI TẠO DỊCH VỤ RIÊNG CHO KHU NHÀ MỚI ĐƯỢC IMPORT
+        | Chỉ chạy khi khu nhà này chưa từng tồn tại (vừa được tạo mới tinh)
+        |--------------------------------------------------------------------------
+        */
+        if ($property->wasRecentlyCreated) {
+            // Lấy toàn bộ danh sách dịch vụ mẫu mặc định toàn hệ thống
+            $globalServices = \App\Models\ServicePrice::whereNull('property_id')->get();
+
+            foreach ($globalServices as $service) {
+                $property->servicePrices()->create([
+                    'service_type'   => $service->service_type,
+                    'unit_price'     => $service->unit_price,
+                    'free_units'     => $service->free_units ?? 0,
+                    'free_unit_type' => $service->free_unit_type ?? null,
+                    'effective_date' => now()->toDateString(),
+                ]);
+            }
+        }
+
+        return $property;
     }
 }
