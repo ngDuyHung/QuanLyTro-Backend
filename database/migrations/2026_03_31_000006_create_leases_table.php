@@ -34,6 +34,9 @@ return new class extends Migration
             $table->unsignedBigInteger('room_price')
                 ->default(0)
                 ->comment('Giá thuê phòng (VND)');
+            $table->unsignedTinyInteger('occupants_count')
+                ->default(1)
+                ->comment('Số lượng người ở thực tế (dùng để tính phí dịch vụ)');
             $table->date('move_out_notice_date')->nullable()
                 ->comment('Ngày khách thông báo trả phòng');
             $table->enum('status', ['active', 'ended'])

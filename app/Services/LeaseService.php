@@ -57,6 +57,7 @@ class LeaseService
                     'billing_day' => $data['billing_day'] ?? 1,
                     'deposit' => $data['deposit'] ?? 0,
                     'room_price' => $data['room_price'] ?? 0,
+                    'occupants_count' => $data['occupants_count'] ?? 1,
                     'status' => LeaseStatus::Active->value,
                 ]);
 
@@ -195,6 +196,7 @@ class LeaseService
             'start_date'  => $data['lease_start_date'],
             'billing_day' => $data['lease_billing_day'] ?? 1,
             'room_price'  => $data['lease_room_price'],
+            'occupants_count' => $data['occupants_count'] ?? 1,
             'deposit'     => $deposit,
             'status'      => 'active',
         ]);

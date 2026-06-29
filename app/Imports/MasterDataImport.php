@@ -90,10 +90,9 @@ class MasterDataImport implements ToCollection
     private function processRow(array $data): void
     {
         $data = $this->translateExcelData($data);
-        $isFullScenario = !empty($data[19]); // Kiểm tra nếu có điền tên khách thuê
+        $isFullScenario = !empty($data[19]);
         $tenantRole = $data[23] ?? null;
 
-        // 1. Xử lý Khu nhà (Cột 0)
         $propertyCode = strtoupper(trim((string)$data[0]));
         if (!isset($this->propertyCache[$propertyCode])) {
             $mappedPropertyData = [
@@ -114,18 +113,14 @@ class MasterDataImport implements ToCollection
         $roomName = trim((string)$data[9]);
         $roomCacheKey = "{$propertyId}_{$roomName}";
 
-        // 2. PHÂN NHÁNH LOGIC DỰA TRÊN VAI TRÒ ĐƯỢC CHỌN TỪ EXCEL
         if ($isFullScenario && $tenantRole === 'member') {
-            // TRƯỜNG HỢP: NGƯỜI Ở GHÉP
             $roomId = null;
             $leaseId = null;
 
-            // Kiểm tra trong lượt import hiện tại xem phòng/hợp đồng đã được tạo từ dòng trên chưa
             if (isset($this->roomLeaseCache[$roomCacheKey])) {
                 $roomId = $this->roomLeaseCache[$roomCacheKey]['room_id'];
                 $leaseId = $this->roomLeaseCache[$roomCacheKey]['lease_id'];
             } else {
-                // Nếu không có trong cache (Người đại diện đã có sẵn trong DB từ trước), tiến hành tra cứu DB
                 $room = \App\Models\Room::where('property_id', $propertyId)->where('name', $roomName)->first();
                 if (!$room) {
                     throw new \Exception("Không thể thêm người ở ghép vì phòng '{$roomName}' chưa tồn tại trong hệ thống.");
@@ -147,7 +142,6 @@ class MasterDataImport implements ToCollection
             ];
             $this->leaseService->addRoommateFromImport($roomId, $leaseId, $mappedRoommateData);
         } else {
-            // TRƯỜNG HỢP: KHỞI TẠO PHÒNG MỚI HOẶC NGƯỜI ĐẠI DIỆN HỢP ĐỒNG
             $mappedRoomData = [
                 'room_name'          => $roomName,
                 'room_current_price' => $data[10],
@@ -172,17 +166,16 @@ class MasterDataImport implements ToCollection
                     'tenant_email'              => $data[22],
                     'lease_start_date'          => $data[24],
                     'lease_billing_day'         => $data[25],
-                    'lease_room_price'          => $data[26], // Khớp: Giá chốt HĐ
-                    'lease_deposit'             => $data[27], // SỬA: Lấy từ Index 27 (Tiền đặt cọc HĐ)
-                    'lease_electricity_reading' => $data[28], // SỬA: Lấy từ Index 28 (Chỉ số ĐIỆN đầu)
-                    'lease_water_reading'       => $data[29], // SỬA: Lấy từ Index 29 (Chỉ số NƯỚC đầu)
-                    // 'lease_contract_number'  => $data[29], // XÓA: Vì file Excel mẫu không có cột Số hợp đồng
+                    'occupants_count'           => $data[26], // <--- Bổ sung Số lượng người (Index 26)
+                    'lease_room_price'          => $data[27], // Đẩy các index sau lùi lại 1 bậc
+                    'lease_deposit'             => $data[28],
+                    'lease_electricity_reading' => $data[29],
+                    'lease_water_reading'       => $data[30],
                     'room_current_price'        => $data[10],
                 ];
 
                 $lease = $this->leaseService->createFromImport($room->id, $mappedLeaseData);
 
-                // Ghi nhận vào Cache để phục vụ cho các dòng ở ghép phía dưới
                 $this->roomLeaseCache[$roomCacheKey] = [
                     'room_id'  => $room->id,
                     'lease_id' => $lease->id
@@ -269,11 +262,12 @@ class MasterDataImport implements ToCollection
             '20' => ['required_with:19', 'nullable', 'string', 'regex:/^[0-9]{9,15}$/'],
             '21' => ['required_with:19', 'nullable', 'string', 'max:20'],
 
-            // Bắt buộc nhập Giá chốt HĐ, Điện, Nước nếu là Đại diện
-            '26' => ['required_if:23,Đại diện', 'nullable', 'integer', 'min:0'], // Giá chốt HĐ
-            '27' => ['nullable', 'integer', 'min:0'],                            // Tiền đặt cọc HĐ (Không bắt buộc)
-            '28' => ['required_if:23,Đại diện', 'nullable', 'integer', 'min:0'], // Số điện
-            '29' => ['required_if:23,Đại diện', 'nullable', 'integer', 'min:0'], // Số nước
+            // CHỈNH SỬA LẠI INDEX VALIDATION
+            '26' => ['required_if:23,Đại diện', 'nullable', 'integer', 'min:1'], // Số lượng người
+            '27' => ['required_if:23,Đại diện', 'nullable', 'integer', 'min:0'], // Giá chốt HĐ
+            '28' => ['nullable', 'integer', 'min:0'],                            // Tiền đặt cọc HĐ
+            '29' => ['required_if:23,Đại diện', 'nullable', 'integer', 'min:0'], // Số điện
+            '30' => ['required_if:23,Đại diện', 'nullable', 'integer', 'min:0'], // Số nước
         ];
     }
 
@@ -312,10 +306,11 @@ class MasterDataImport implements ToCollection
             '21' => 'Số CCCD/CMND khách',
             '23' => 'Vai trò trong phòng',
             '24' => 'Ngày bắt đầu HĐ',
-            '26' => 'Giá chốt HĐ',
-            '27' => 'Tiền đặt cọc HĐ',   // THÊM MỚI
-            '28' => 'Chỉ số ĐIỆN đầu',   // CHỈNH LẠI INDEX
-            '29' => 'Chỉ số NƯỚC đầu',   // CHỈNH LẠI INDEX
+            '26' => 'Số lượng người ở',  // THÊM MỚI
+            '27' => 'Giá chốt HĐ',       // ĐẨY INDEX
+            '28' => 'Tiền đặt cọc HĐ',   // ĐẨY INDEX
+            '29' => 'Chỉ số ĐIỆN đầu',   // ĐẨY INDEX
+            '30' => 'Chỉ số NƯỚC đầu',   // ĐẨY INDEX
         ];
     }
 }

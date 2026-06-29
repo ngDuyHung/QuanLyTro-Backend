@@ -278,10 +278,12 @@ class InvoiceService
 
             $quantity = (float) ($item['quantity'] ?? 1);
             $unitPriceSnapshot = (int) ($item['unit_price_snapshot'] ?? 0);
+            $freeQuantitySnapshot = (float) ($item['free_quantity_snapshot'] ?? 0);
+            $billableQuantity = max(0, $quantity - $freeQuantitySnapshot);
 
             $amount = array_key_exists('amount', $item)
                 ? (int) $item['amount']
-                : (int) round($quantity * $unitPriceSnapshot);
+                : (int) round($billableQuantity * $unitPriceSnapshot);
 
             if ($chargeType === 'discount' && $amount > 0) {
                 $amount *= -1;
@@ -412,13 +414,32 @@ class InvoiceService
 
         // 2. TỰ ĐỘNG TÍNH TOÁN CÁC DỊCH VỤ ĐÃ ĐĂNG KÝ THEO HỢP ĐỒNG (Gộp xử lý chỉ số vào đây)
         foreach ($lease->serviceItems as $serviceItem) {
-            $type = $serviceItem->service_type->value;
-            $priceRule = $applicablePrices->get($type);
+            // 1. Lấy type dạng chuỗi một cách an toàn
+            $type = $serviceItem->service_type instanceof \BackedEnum
+                ? $serviceItem->service_type->value
+                : $serviceItem->service_type;
 
-            // Xác định đơn giá dịch vụ
+            // 2. TÌM KIẾM AN TOÀN TRONG COLLECTION (Fix lỗi null do Enum)
+            $priceRule = $applicablePrices->first(function ($price) use ($type) {
+                $priceType = $price->service_type instanceof \BackedEnum
+                    ? $price->service_type->value
+                    : $price->service_type;
+                return $priceType === $type;
+            });
+
+            // 3. Xác định đơn giá dịch vụ
             $unitPrice = $serviceItem->custom_price ?? ($priceRule ? $priceRule->unit_price : 0);
             $quantity = $serviceItem->quantity;
             $freeUnits = 0;
+
+            // 4. Tính toán số lượng miễn phí từ bảng service_prices
+            if ($priceRule && $priceRule->free_units > 0 && $priceRule->free_unit_type !== 'none') {
+                $memberCount = $priceRule->free_unit_type === 'per_person'
+                    ? (int) ($lease->occupants_count ?? 1) // Ép kiểu int để an toàn nếu DB rỗng
+                    : 1;
+
+                $freeUnits = $priceRule->free_units * $memberCount;
+            }
 
             // Các biến bổ sung để phục vụ điện nước có cấu trúc
             $previousReading = null;
@@ -429,14 +450,12 @@ class InvoiceService
             if ($isUtility) {
                 // TRƯỜNG HỢP LÀ ĐIỆN / NƯỚC
                 if ($unbilledReadings->has($type)) {
-                    // Nếu ĐÃ chốt số trước đó ở màn hình Tiện ích
                     $reading = $unbilledReadings->get($type);
                     $previousReading = $reading->previous_reading;
                     $currentReading = $reading->current_reading;
                     $quantity = max(0, $currentReading - $previousReading);
                     $isChotRoi = true;
                 } else {
-                    // Nếu CHƯA chốt số -> Tự động truy vết số cũ gần nhất trong lịch sử
                     $lastReading = MeterReading::where('lease_id', $leaseId)
                         ->where('type', $type)
                         ->orderByDesc('reading_date')
@@ -444,20 +463,16 @@ class InvoiceService
                         ->first();
 
                     $previousReading = $lastReading ? $lastReading->current_reading : 0;
-                    $currentReading = ''; // Để trống cho khách tự nhập số mới trên UI
+                    $currentReading = '';
                     $quantity = 0;
                     $isChotRoi = false;
                 }
-                $amount = $unitPrice * $quantity;
+
+                // Tiền điện/nước = (Số dùng - Số miễn phí) * Đơn giá
+                $billableQuantity = max(0, $quantity - $freeUnits);
+                $amount = $unitPrice * $billableQuantity;
             } else {
                 // TRƯỜNG HỢP CÁC DỊCH VỤ KHÁC (Rác, mạng, xe...)
-                if ($priceRule && $priceRule->free_units > 0 && $priceRule->free_unit_type !== 'none') {
-                    $memberCount = $priceRule->free_unit_type === 'per_person'
-                        ? ($lease->members()->count() + 1)
-                        : 1;
-
-                    $freeUnits = $priceRule->free_units * $memberCount;
-                }
                 $billableQuantity = max(0, $quantity - $freeUnits);
                 $amount = $unitPrice * $billableQuantity;
             }
@@ -468,12 +483,11 @@ class InvoiceService
                 'charge_type' => $type,
                 'description' => 'Tiền ' . mb_strtolower($serviceItem->service_type->label()),
                 'unit' => $type === 'electricity' ? 'kWh' : ($type === 'water' ? 'm³' : 'Tháng/Lần'),
-                'free_quantity_snapshot' => $freeUnits,
-                'quantity' => $quantity,
+                'free_quantity_snapshot' => $freeUnits, // <--- Backend gửi kèm thông số miễn phí để Frontend biết
+                'quantity' => $quantity, // Vẫn gửi số lượng tổng thực tế
                 'unit_price_snapshot' => $unitPrice,
-                'amount' => $amount,
+                'amount' => $amount, // Số tiền sau khi đã trừ miễn phí
 
-                // Trả thêm cấu trúc rõ ràng sang Frontend
                 'is_utility' => $isUtility,
                 'previous_reading' => $previousReading,
                 'current_reading' => $currentReading,

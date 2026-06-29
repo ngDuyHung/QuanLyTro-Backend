@@ -30,7 +30,7 @@ class MasterDataTemplateExport implements FromCollection, WithStyles, ShouldAuto
                     '4. Đối với người ở ghép, vui lòng nhập TRÙNG Mã khu nhà và Tên phòng với dòng của người Đại diện, sau đó chọn Vai trò là "Ở ghép".'
             ],
 
-            // DÒNG 2: TIÊU ĐỀ TIẾNG VIỆT MỚI (29 cột: A -> AC)
+            // DÒNG 2: TIÊU ĐỀ TIẾNG VIỆT MỚI (31 cột: A -> AE)
             [
                 // Cột A - I (Khu nhà - 9 cột)
                 'Mã khu nhà (*)',
@@ -55,7 +55,7 @@ class MasterDataTemplateExport implements FromCollection, WithStyles, ShouldAuto
                 'Đăng công khai? (Chọn ▼) (*)',
                 'Mô tả riêng của phòng',
 
-                // Cột T - AC (Hợp đồng & Khách thuê - 10 cột)
+                // Cột T - AE (Hợp đồng & Khách thuê - 12 cột)
                 'Họ tên khách thuê',
                 'Số điện thoại khách',
                 'Số CCCD/CMND khách',
@@ -63,6 +63,7 @@ class MasterDataTemplateExport implements FromCollection, WithStyles, ShouldAuto
                 'Vai trò trong phòng (Chọn ▼) (*)',
                 'Ngày bắt đầu HĐ',
                 'Ngày thu tiền HĐ',
+                'Số lượng người ở (*)', // <--- THÊM MỚI Ở ĐÂY (Cột AA)
                 'Giá chốt HĐ (*)',
                 'Tiền đặt cọc HĐ',
                 'Chỉ số ĐIỆN đầu',
@@ -71,72 +72,37 @@ class MasterDataTemplateExport implements FromCollection, WithStyles, ShouldAuto
 
             // DÒNG 3: DỮ LIỆU MẪU DUY NHẤT (Đầy đủ liên kết)
             [
-                'KH-01',
-                'Khu trọ Cao Lỗ',
-                'Phòng trọ',
-                'Hoạt động',
-                '180 Cao Lỗ, Phường 4, Quận 8',
-                3,
-                15,
-                'Nguyễn Văn A',
-                'Khu trọ an ninh cao',
-                'P.101',
-                3500000,
-                1,
-                'Đã cho thuê',
-                25,
-                3,
-                1,
-                'Có',
-                'Có',
-                'Có ban công riêng',
-                'Nguyễn Văn Linh',
-                '0901234567',
-                '079094012345',
-                'linh.nguyen@gmail.com',
-                'Đại diện',
-                '2026-07-01',
-                1,
-                3500000,
-                500000,
-                150,
-                40
+                'KH-01', 'Khu trọ Cao Lỗ', 'Phòng trọ', 'Hoạt động', '180 Cao Lỗ, Phường 4, Quận 8', 3, 15, 'Nguyễn Văn A', 'Khu trọ an ninh cao',
+                'P.101', 3500000, 1, 'Đã cho thuê', 25, 3, 1, 'Có', 'Có', 'Có ban công riêng',
+                'Nguyễn Văn Linh', '0901234567', '079094012345', 'linh.nguyen@gmail.com', 'Đại diện', '2026-07-01', 1, 
+                2, // <--- Số lượng người ở mẫu
+                3500000, 500000, 150, 40
             ]
         ]);
     }
 
     public function styles(Worksheet $sheet): array
     {
-        // Dòng 1: Banner Hướng dẫn tổng quan
-        $sheet->mergeCells('A1:AD1');
+        $sheet->mergeCells('A1:AE1');
         $sheet->getRowDimension(1)->setRowHeight(40);
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(11)->getColor()->setARGB('C00000');
         $sheet->getStyle('A1')->getAlignment()->setVertical(Alignment::VERTICAL_CENTER)->setWrapText(true);
-        $sheet->getStyle('A1:AD1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFF2CC');
+        $sheet->getStyle('A1:AE1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFF2CC');
 
-        // Dòng 2: Tiêu đề Tiếng Việt
         $sheet->getRowDimension(2)->setRowHeight(28);
-        $sheet->getStyle('A2:AD2')->getFont()->setBold(true)->setSize(11);
-        $sheet->getStyle('A2:AD2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+        $sheet->getStyle('A2:AE2')->getFont()->setBold(true)->setSize(11);
+        $sheet->getStyle('A2:AE2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
 
-        // Đổ màu phân vùng tiêu đề chính
-        $sheet->getStyle('A2:I2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('DCE6F1'); // Khu nhà (A-I)
-        $sheet->getStyle('J2:S2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('E2EFDA'); // Phòng (J-S)
-        $sheet->getStyle('T2:AD2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FCE4D6'); // Hợp đồng (T-AD)
+        $sheet->getStyle('A2:I2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('DCE6F1');
+        $sheet->getStyle('J2:S2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('E2EFDA');
+        $sheet->getStyle('T2:AE2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FCE4D6'); // Kéo dài đến AE
 
-        // // Highlight màu nền nhạt cảnh báo riêng biệt cho các cột có Dropdown lựa chọn
-        // // Cột C (Loại nhà), D (Trạng thái nhà), M (Trạng thái phòng), Q (Cho ở ghép), R (Đăng công khai), X (Vai trò)
-        // $dropdownRanges = ['C3:C1000', 'D3:D1000', 'M3:M1000', 'Q3:Q1000', 'R3:R1000', 'X3:X1000'];
-        // foreach ($dropdownRanges as $range) {
-        //     $sheet->getStyle($range)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFF9E6');
-        // }
-
-        // Định dạng hiển thị tiền tệ phân tách hàng nghìn cho cột K (Giá phòng) và AA (Tiền đặt cọc)
+        // Định dạng cột tiền tệ
         $sheet->getStyle('K3:K1000')->getNumberFormat()->setFormatCode('#,##0');
-        $sheet->getStyle('AA3:AA1000')->getNumberFormat()->setFormatCode('#,##0');
+        $sheet->getStyle('AB3:AB1000')->getNumberFormat()->setFormatCode('#,##0'); // Cột AB
+        $sheet->getStyle('AC3:AC1000')->getNumberFormat()->setFormatCode('#,##0'); // Cột AC
 
-        // Khung viền & Ép định dạng Text cho cột SĐT (U) và CCCD (V)
-        $sheet->getStyle('A1:AD3')->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('BFBFBF');
+        $sheet->getStyle('A1:AE3')->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('BFBFBF');
         $sheet->getStyle('U3:V1000')->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
 
         return [];
@@ -176,15 +142,13 @@ class MasterDataTemplateExport implements FromCollection, WithStyles, ShouldAuto
                     return $validation;
                 };
 
-                // Đổ Dropdown Danh sách lựa chọn tiếng Việt
                 $sheet->setDataValidation("C3:C{$maxRow}", $createDropdown('Phòng trọ,Căn hộ,Homestay,Nhà nguyên căn'));
                 $sheet->setDataValidation("D3:D{$maxRow}", $createDropdown('Hoạt động,Ngừng hoạt động'));
                 $sheet->setDataValidation("M3:M{$maxRow}", $createDropdown('Còn trống,Đang bảo trì,Đã cho thuê'));
                 $sheet->setDataValidation("Q3:Q{$maxRow}", $createDropdown('Có,Không'));
                 $sheet->setDataValidation("R3:R{$maxRow}", $createDropdown('Có,Không'));
-                $sheet->setDataValidation("X3:X{$maxRow}", $createDropdown('Đại diện,Ở ghép')); // Dropdown Vai trò mới
+                $sheet->setDataValidation("X3:X{$maxRow}", $createDropdown('Đại diện,Ở ghép'));
 
-                // Cấu hình Tooltip nhắc nhở số
                 $pricePrompt = "Vui lòng chỉ gõ số liền mạch (Ví dụ: 3500000).";
                 $numberPrompt = "Chỉ nhập chữ số nguyên (Ví dụ: 5).";
 
@@ -196,10 +160,13 @@ class MasterDataTemplateExport implements FromCollection, WithStyles, ShouldAuto
                 $sheet->setDataValidation("O3:O{$maxRow}", $createNumericPrompt('Nhập số người tối đa', $numberPrompt));
                 $sheet->setDataValidation("P3:P{$maxRow}", $createNumericPrompt('Nhập ngày thu tiền phòng', "Điền số từ 1 đến 31."));
                 $sheet->setDataValidation("Z3:Z{$maxRow}", $createNumericPrompt('Nhập ngày thu tiền hợp đồng', "Điền số từ 1 đến 28."));
-                $sheet->setDataValidation("AA3:AA{$maxRow}", $createNumericPrompt('Nhập giá chốt HĐ', $pricePrompt, true)); // MỚI THÊM
-                $sheet->setDataValidation("AB3:AB{$maxRow}", $createNumericPrompt('Nhập tiền đặt cọc', $pricePrompt, true));
-                $sheet->setDataValidation("AC3:AC{$maxRow}", $createNumericPrompt('Nhập chỉ số điện đầu', $numberPrompt));
-                $sheet->setDataValidation("AD3:AD{$maxRow}", $createNumericPrompt('Nhập chỉ số nước đầu', $numberPrompt));
+                
+                // DỊCH CỘT VALIDATE TỪ AA SANG AE
+                $sheet->setDataValidation("AA3:AA{$maxRow}", $createNumericPrompt('Nhập số người ở', "Số lượng thành viên thực tế trong phòng."));
+                $sheet->setDataValidation("AB3:AB{$maxRow}", $createNumericPrompt('Nhập giá chốt HĐ', $pricePrompt, true));
+                $sheet->setDataValidation("AC3:AC{$maxRow}", $createNumericPrompt('Nhập tiền đặt cọc', $pricePrompt, true));
+                $sheet->setDataValidation("AD3:AD{$maxRow}", $createNumericPrompt('Nhập chỉ số điện đầu', $numberPrompt));
+                $sheet->setDataValidation("AE3:AE{$maxRow}", $createNumericPrompt('Nhập chỉ số nước đầu', $numberPrompt));
             },
         ];
     }
