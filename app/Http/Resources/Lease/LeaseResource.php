@@ -21,8 +21,10 @@ class LeaseResource extends JsonResource
             'deposit'              => $this->deposit,
             'room_price'           => $this->room_price,
             'move_out_notice_date' => $this->move_out_notice_date?->toDateString(),
-            'status'               => $this->status?->value,
-            'status_label'         => $this->status?->label(),
+            'status'               => is_object($this->status) ? $this->status->value : $this->status,
+            'status_label'         => is_object($this->status) && method_exists($this->status, 'label')
+                ? $this->status->label()
+                : $this->status,
             'created_at'           => $this->created_at?->toISOString(),
             'updated_at'           => $this->updated_at?->toISOString(),
 
@@ -31,8 +33,10 @@ class LeaseResource extends JsonResource
                 'id'       => $this->room->id,
                 'name'     => $this->room->name,
                 'area'     => $this->room->area ? (float) $this->room->area : null,
-                'status'   => $this->room->status?->value,
-                'status_label' => $this->room->status?->label(),
+                'status'   => is_object($this->room->status) ? $this->room->status->value : $this->room->status,
+                'status_label' => is_object($this->room->status) && method_exists($this->room->status, 'label')
+                    ? $this->room->status->label()
+                    : (string) $this->room->status,
                 'current_price' => $this->room->current_price,
                 'property' => $this->room->relationLoaded('property') ? [
                     'id'      => $this->room->property->id,
@@ -75,8 +79,10 @@ class LeaseResource extends JsonResource
                 $this->invoices->map(fn($invoice) => [
                     'id'            => $invoice->id,
                     'invoice_code'  => $invoice->invoice_code,
-                    'status'        => $invoice->status?->value,
-                    'status_label'  => $invoice->status?->label(),
+                    'status'        => is_object($invoice->status) ? $invoice->status->value : $invoice->status,
+                    'status_label'  => is_object($invoice->status) && method_exists($invoice->status, 'label')
+                        ? $invoice->status->label()
+                        : (string) $invoice->status,
                     'total_amount'  => $invoice->total_amount,
                     'billing_month' => $invoice->billing_month,
                 ])

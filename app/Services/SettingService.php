@@ -38,26 +38,24 @@ class SettingService
         );
     }
 
-    /**
-     * Biên dịch HTML và tạo object PDF
-     */
-    public function generateLeasePdf(int $leaseId, int $userId)
+    // Thêm hàm mới này vào SettingService.php
+    public function compileLeaseHtml(int $leaseId, int $userId): string
     {
-        // 1. Lấy dữ liệu hợp đồng thực tế (Nhớ Load thêm serviceItems)
-        $lease = Lease::with(['tenant', 'room.property.user', 'serviceItems'])
+        $lease = \App\Models\Lease::with(['tenant', 'room.property.user', 'serviceItems'])
             ->whereHas('room.property', function ($query) use ($userId) {
                 $query->where('user_id', $userId);
             })
-            ->find($leaseId);
+            ->findOrFail($leaseId);
 
         $html = $this->getContractTemplate($userId);
         if (empty($html)) {
-            $html = '<h1>Chưa có mẫu hợp đồng</h1>';
+            $html = '<div style="text-align:center; padding: 50px; font-family: sans-serif;">
+                        <h2>Chưa có mẫu hợp đồng</h2>
+                        <p>Vui lòng cấu hình mẫu hợp đồng trong hệ thống.</p>
+                     </div>';
         }
 
-        // --- LOGIC XỬ LÝ DANH SÁCH DỊCH VỤ ---
         $applicablePrices = \App\Models\ServicePrice::getApplicablePrices((int)$lease->room->property_id);
-
         $servicesHtml = '<ul style="margin-top: 5px; margin-bottom: 15px; list-style-type: disc; padding-left: 20px;">';
         $activeServices = $lease->serviceItems->whereNull('expiry_date');
 
@@ -67,7 +65,6 @@ class SettingService
             foreach ($activeServices as $item) {
                 $typeValue = is_object($item->service_type) ? $item->service_type->value : $item->service_type;
 
-                // Lấy Label
                 $label = 'Dịch vụ';
                 if (is_object($item->service_type) && method_exists($item->service_type, 'label')) {
                     $label = $item->service_type->label();
@@ -76,7 +73,6 @@ class SettingService
                     if ($enum) $label = $enum->label();
                 }
 
-                // Tìm giá áp dụng
                 $priceRule = $applicablePrices->first(function ($p) use ($typeValue) {
                     $pt = is_object($p->service_type) ? $p->service_type->value : $p->service_type;
                     return $pt === $typeValue;
@@ -84,48 +80,42 @@ class SettingService
 
                 $unitPrice = $item->custom_price ?? ($priceRule ? $priceRule->unit_price : 0);
                 $formattedPrice = number_format((float)$unitPrice, 0, ',', '.');
-
                 $unit = match ($typeValue) {
                     'electricity' => 'kWh',
                     'water' => 'khối',
                     default => 'tháng'
                 };
-
                 $servicesHtml .= "<li style='margin-bottom: 3px;'><strong>{$label}:</strong> {$formattedPrice} VNĐ/{$unit}</li>";
             }
         }
         $servicesHtml .= '</ul>';
-        // ------------------------------------
 
-        // 3. Chuẩn bị bộ từ điển biến động (Shortcodes)
         $replacePairs = [
             '{{CURRENT_DAY}}' => date('d'),
             '{{CURRENT_MONTH}}' => date('m'),
             '{{CURRENT_YEAR}}' => date('Y'),
-
             '{{LANDLORD_NAME}}' => $lease->room->property->user->name ?? '',
             '{{LANDLORD_PHONE}}' => $lease->room->property->user->phone ?? '',
-
             '{{TENANT_NAME}}' => $lease->tenant->full_name ?? '',
             '{{TENANT_PHONE}}' => $lease->tenant->phone ?? '',
             '{{TENANT_CCCD}}' => $lease->tenant->id_card_number ?? '',
-
             '{{ROOM_NAME}}' => $lease->room->name ?? '',
             '{{ROOM_PRICE}}' => number_format((float) $lease->room->current_price, 0, ',', '.'),
             '{{DEPOSIT}}' => number_format((float) $lease->deposit, 0, ',', '.'),
-            '{{START_DATE}}' => Carbon::parse($lease->start_date)->format('d/m/Y'),
-
+            '{{START_DATE}}' => \Carbon\Carbon::parse($lease->start_date)->format('d/m/Y'),
             '{{PROPERTY_NAME}}' => $lease->room->property->name ?? '',
             '{{PROPERTY_ADDRESS}}' => $lease->room->property->address ?? '',
-
-            // Bổ sung shortcode dịch vụ vào đây
             '{{SERVICES_LIST}}' => $servicesHtml,
         ];
 
-        // 4. Thay thế biến thành dữ liệu thật
-        $compiledHtml = str_replace(array_keys($replacePairs), array_values($replacePairs), $html);
+        return str_replace(array_keys($replacePairs), array_values($replacePairs), $html);
+    }
 
-        // ... (Phần bọc HTML để nguyên như cũ)
+    // Sửa lại hàm generateLeasePdf hiện tại để tái sử dụng mã
+    public function generateLeasePdf(int $leaseId, int $userId)
+    {
+        $compiledHtml = $this->compileLeaseHtml($leaseId, $userId);
+
         $fullHtml = <<<HTML
         <!DOCTYPE html>
         <html lang="vi">
@@ -145,7 +135,7 @@ class SettingService
         </html>
         HTML;
 
-        return Pdf::loadHTML($fullHtml)->setPaper('A4', 'portrait')->setWarnings(false);
+        return \Barryvdh\DomPDF\Facade\Pdf::loadHTML($fullHtml)->setPaper('A4', 'portrait')->setWarnings(false);
     }
 
 

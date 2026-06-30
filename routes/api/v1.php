@@ -75,6 +75,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::patch('leases/{lease}/end',           [LeaseController::class, 'end'])->name('leases.end');
     Route::patch('leases/{lease}/representative', [LeaseController::class, 'changeRepresentative'])->name('leases.representative');
     Route::delete('leases/{lease}',              [LeaseController::class, 'destroy'])->name('leases.destroy');
+    Route::get('/leases/{id}/preview', [LeaseController::class, 'previewHtml']);
 
     // ── Lease Members (Thành viên hợp đồng) ──────────────────────────────
     Route::get('leases/{leaseId}/members',    [LeaseMemberController::class, 'index'])->name('leases.members.index');

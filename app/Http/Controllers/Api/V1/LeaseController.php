@@ -12,6 +12,7 @@ use App\Http\Resources\Lease\LeaseResource;
 use App\Models\Lease;
 use App\Models\Tenant;
 use App\Services\LeaseService;
+use App\Services\SettingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -235,5 +236,11 @@ class LeaseController extends Controller
         $memberRecord->delete();
 
         return (new LeaseResource($lease->load(['room.property', 'tenant'])))->response();
+    }
+
+    public function previewHtml(int $id, Request $request, SettingService $settingService)
+    {
+        $html = $settingService->compileLeaseHtml($id, $request->user()->id);
+        return response()->json(['html' => $html]);
     }
 }
