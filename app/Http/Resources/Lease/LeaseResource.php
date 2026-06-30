@@ -83,13 +83,17 @@ class LeaseResource extends JsonResource
             ),
 
             'service_items' => $this->whenLoaded('serviceItems', function () {
-                return $this->serviceItems->map(fn($item) => [
+                // Chỉ lấy các dịch vụ đang active (chưa hết hạn)
+                return $this->serviceItems->whereNull('expiry_date')->map(fn($item) => [
                     'id'                 => $item->id,
-                    'service_type'       => $item->service_type->value,
-                    'service_type_label' => $item->service_type->label(),
+                    'service_type'       => is_object($item->service_type) ? $item->service_type->value : $item->service_type,
+                    'service_type_label' => is_object($item->service_type) && method_exists($item->service_type, 'label')
+                        ? $item->service_type->label()
+                        : (string) $item->service_type,
                     'quantity'           => $item->quantity,
                     'custom_price'       => $item->custom_price,
-                ]);
+                    'effective_date'     => $item->effective_date, // Trả thêm xuống cho FE nếu cần
+                ])->values(); // Reset lại key của array
             }),
         ];
     }

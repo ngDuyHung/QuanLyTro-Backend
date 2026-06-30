@@ -20,12 +20,16 @@ class LeaseServiceItem extends Model
         'service_type',
         'quantity',
         'custom_price',
+        'effective_date',
+        'expiry_date',
     ];
 
     protected $casts = [
         'service_type' => ServiceType::class,
         'quantity' => 'integer',
         'custom_price' => 'integer',
+        'effective_date' => 'date',
+        'expiry_date' => 'date',
     ];
 
     public function lease(): BelongsTo

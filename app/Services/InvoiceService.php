@@ -68,7 +68,7 @@ class InvoiceService
 
                 'invoice_code' => $this->generateInvoiceCode((int)$lease->room_id),
                 'invoice_type' => $invoiceType,
-    
+
                 'period_from' => $data['period_from'],
                 'period_to' => $data['period_to'],
 
@@ -387,6 +387,7 @@ class InvoiceService
         $lease = Lease::with(['room.property', 'tenant', 'serviceItems', 'members'])
             ->whereHas('room.property', fn($q) => $q->where('user_id', $userId))
             ->findOrFail($leaseId);
+        //dd($lease->occupants_count); // dòng nay để debug xem số lượng người ở ghép, dùng cho free_units per_person
 
         $items = [];
         $propertyId = $lease->room->property_id;
@@ -397,8 +398,8 @@ class InvoiceService
             'description' => 'Tiền phòng',
             'unit' => 'Tháng',
             'quantity' => 1,
-            'unit_price_snapshot' => $lease->room->current_price,
-            'amount' => $lease->room->current_price,
+            'unit_price_snapshot' => $lease->room_price, // Thay vì $lease->room->current_price
+            'amount' => $lease->room_price,
             'is_utility' => false,
         ];
 
@@ -412,14 +413,20 @@ class InvoiceService
             ->get()
             ->keyBy('type');
 
-        // 2. TỰ ĐỘNG TÍNH TOÁN CÁC DỊCH VỤ ĐÃ ĐĂNG KÝ THEO HỢP ĐỒNG (Gộp xử lý chỉ số vào đây)
-        foreach ($lease->serviceItems as $serviceItem) {
-            // 1. Lấy type dạng chuỗi một cách an toàn
+        // 2. CHỈ LẤY CÁC DỊCH VỤ CÓ HIỆU LỰC TẠI KỲ HÓA ĐƠN NÀY ($periodTo)
+        $activeServiceItems = $lease->serviceItems->filter(function ($item) use ($periodTo) {
+            $effective = $item->effective_date ? \Carbon\Carbon::parse($item->effective_date)->toDateString() : '2000-01-01';
+            $expiry = $item->expiry_date ? \Carbon\Carbon::parse($item->expiry_date)->toDateString() : null;
+
+            return $effective <= $periodTo && ($expiry === null || $expiry >= $periodTo);
+        });
+
+        // Loop qua danh sách đã lọc thay vì toàn bộ $lease->serviceItems
+        foreach ($activeServiceItems as $serviceItem) {
             $type = $serviceItem->service_type instanceof \BackedEnum
                 ? $serviceItem->service_type->value
                 : $serviceItem->service_type;
 
-            // 2. TÌM KIẾM AN TOÀN TRONG COLLECTION (Fix lỗi null do Enum)
             $priceRule = $applicablePrices->first(function ($price) use ($type) {
                 $priceType = $price->service_type instanceof \BackedEnum
                     ? $price->service_type->value
@@ -433,12 +440,19 @@ class InvoiceService
             $freeUnits = 0;
 
             // 4. Tính toán số lượng miễn phí từ bảng service_prices
-            if ($priceRule && $priceRule->free_units > 0 && $priceRule->free_unit_type !== 'none') {
-                $memberCount = $priceRule->free_unit_type === 'per_person'
-                    ? (int) ($lease->occupants_count ?? 1) // Ép kiểu int để an toàn nếu DB rỗng
-                    : 1;
+            if ($priceRule && $priceRule->free_units > 0) {
+                // Lấy ra chuỗi value thực sự của Enum để so sánh
+                $freeUnitTypeValue = $priceRule->free_unit_type instanceof \BackedEnum
+                    ? $priceRule->free_unit_type->value
+                    : $priceRule->free_unit_type;
 
-                $freeUnits = $priceRule->free_units * $memberCount;
+                if ($freeUnitTypeValue !== 'none') {
+                    $memberCount = $freeUnitTypeValue === 'per_person'
+                        ? (int) ($lease->occupants_count ?? 1)
+                        : 1;
+
+                    $freeUnits = $priceRule->free_units * $memberCount;
+                }
             }
 
             // Các biến bổ sung để phục vụ điện nước có cấu trúc

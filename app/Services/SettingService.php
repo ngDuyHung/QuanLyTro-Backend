@@ -43,19 +43,59 @@ class SettingService
      */
     public function generateLeasePdf(int $leaseId, int $userId)
     {
-        // 1. Lấy dữ liệu hợp đồng thực tế
-        $lease = Lease::with(['tenant', 'room.property.user'])
+        // 1. Lấy dữ liệu hợp đồng thực tế (Nhớ Load thêm serviceItems)
+        $lease = Lease::with(['tenant', 'room.property.user', 'serviceItems'])
             ->whereHas('room.property', function ($query) use ($userId) {
                 $query->where('user_id', $userId);
             })
             ->find($leaseId);
 
-        // 2. Lấy mẫu hợp đồng
         $html = $this->getContractTemplate($userId);
-
         if (empty($html)) {
             $html = '<h1>Chưa có mẫu hợp đồng</h1>';
         }
+
+        // --- LOGIC XỬ LÝ DANH SÁCH DỊCH VỤ ---
+        $applicablePrices = \App\Models\ServicePrice::getApplicablePrices((int)$lease->room->property_id);
+
+        $servicesHtml = '<ul style="margin-top: 5px; margin-bottom: 15px; list-style-type: disc; padding-left: 20px;">';
+        $activeServices = $lease->serviceItems->whereNull('expiry_date');
+
+        if ($activeServices->isEmpty()) {
+            $servicesHtml .= '<li>Không có dịch vụ đăng ký kèm theo.</li>';
+        } else {
+            foreach ($activeServices as $item) {
+                $typeValue = is_object($item->service_type) ? $item->service_type->value : $item->service_type;
+
+                // Lấy Label
+                $label = 'Dịch vụ';
+                if (is_object($item->service_type) && method_exists($item->service_type, 'label')) {
+                    $label = $item->service_type->label();
+                } elseif (class_exists(\App\Enums\ServiceType::class)) {
+                    $enum = \App\Enums\ServiceType::tryFrom($typeValue);
+                    if ($enum) $label = $enum->label();
+                }
+
+                // Tìm giá áp dụng
+                $priceRule = $applicablePrices->first(function ($p) use ($typeValue) {
+                    $pt = is_object($p->service_type) ? $p->service_type->value : $p->service_type;
+                    return $pt === $typeValue;
+                });
+
+                $unitPrice = $item->custom_price ?? ($priceRule ? $priceRule->unit_price : 0);
+                $formattedPrice = number_format((float)$unitPrice, 0, ',', '.');
+
+                $unit = match ($typeValue) {
+                    'electricity' => 'kWh',
+                    'water' => 'khối',
+                    default => 'tháng'
+                };
+
+                $servicesHtml .= "<li style='margin-bottom: 3px;'><strong>{$label}:</strong> {$formattedPrice} VNĐ/{$unit}</li>";
+            }
+        }
+        $servicesHtml .= '</ul>';
+        // ------------------------------------
 
         // 3. Chuẩn bị bộ từ điển biến động (Shortcodes)
         $replacePairs = [
@@ -77,12 +117,15 @@ class SettingService
 
             '{{PROPERTY_NAME}}' => $lease->room->property->name ?? '',
             '{{PROPERTY_ADDRESS}}' => $lease->room->property->address ?? '',
+
+            // Bổ sung shortcode dịch vụ vào đây
+            '{{SERVICES_LIST}}' => $servicesHtml,
         ];
 
         // 4. Thay thế biến thành dữ liệu thật
         $compiledHtml = str_replace(array_keys($replacePairs), array_values($replacePairs), $html);
 
-        // 4.5. Bọc toàn bộ nội dung vào khung HTML chuẩn để ép font tiếng Việt (DejaVu Sans)
+        // ... (Phần bọc HTML để nguyên như cũ)
         $fullHtml = <<<HTML
         <!DOCTYPE html>
         <html lang="vi">
@@ -101,7 +144,7 @@ class SettingService
         </body>
         </html>
         HTML;
-        // 5. Khởi tạo PDF
+
         return Pdf::loadHTML($fullHtml)->setPaper('A4', 'portrait')->setWarnings(false);
     }
 

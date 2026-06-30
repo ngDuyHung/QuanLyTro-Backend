@@ -115,6 +115,8 @@ class LeaseService
                             'service_type' => $service['service_type'],
                             'quantity'     => $service['quantity'],
                             'custom_price' => $service['custom_price'] ?? null,
+                            'effective_date' => $data['start_date'],
+                            'expiry_date'    => null,
                         ]);
                     }
                 }
@@ -265,6 +267,8 @@ class LeaseService
                     'service_type' => $service->service_type,
                     'quantity'     => 1,    // Mặc định gán số lượng là 1 khi import
                     'custom_price' => $service->unit_price, // Null để hệ thống tự mapping với bảng giá gốc
+                    'effective_date' => $data['lease_start_date'],
+                    'expiry_date'    => null,
                 ]);
             }
         }

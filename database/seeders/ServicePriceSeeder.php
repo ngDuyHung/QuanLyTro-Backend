@@ -31,7 +31,7 @@ class ServicePriceSeeder extends Seeder
             [
                 'property_id' => null,
                 'service_type' => 'water',
-                'unit_price' => 20000, // 20,000đ / m3
+                'unit_price' => 15000, // 15,000đ / m3
                 'free_units' => 0,
                 'free_unit_type' => 'none',
                 'effective_date' => '2024-01-01',
@@ -43,7 +43,7 @@ class ServicePriceSeeder extends Seeder
             [
                 'property_id' => null,
                 'service_type' => 'internet',
-                'unit_price' => 100000, // 100,000đ / phòng
+                'unit_price' => 40000, // 40,000đ / phòng
                 'free_units' => 0,
                 'free_unit_type' => 'none',
                 'effective_date' => '2024-01-01',
@@ -55,7 +55,7 @@ class ServicePriceSeeder extends Seeder
             [
                 'property_id' => null,
                 'service_type' => 'garbage',
-                'unit_price' => 40000, // 40,000đ / phòng
+                'unit_price' => 60000, // 60,000đ / tháng
                 'free_units' => 0,
                 'free_unit_type' => 'none',
                 'effective_date' => '2024-01-01',

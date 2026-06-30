@@ -93,20 +93,54 @@ class LeaseController extends Controller
                 $lease->update($leaseData);
             }
 
-            // 2. Xử lý cập nhật danh sách dịch vụ đi kèm
+            // 2. Xử lý cập nhật danh sách dịch vụ đi kèm với logic Versioning
             if ($request->has('services')) {
-                // Xóa sạch dịch vụ cũ của hợp đồng này
-                $lease->serviceItems()->delete();
+                $today = now()->toDateString();
+                $newServices = collect($data['services']);
+                $newServiceTypes = $newServices->pluck('service_type')->toArray();
 
-                // Insert lại danh sách dịch vụ mới (nếu có)
-                if (!empty($data['services'])) {
-                    foreach ($data['services'] as $service) {
-                        $lease->serviceItems()->create([
-                            'service_type' => $service['service_type'],
-                            'quantity'     => $service['quantity'],
-                            'custom_price' => $service['custom_price'] ?? null,
-                        ]);
+                // Lấy các dịch vụ ĐANG HOẠT ĐỘNG của hợp đồng
+                $activeServices = $lease->serviceItems()->whereNull('expiry_date')->get();
+
+                foreach ($activeServices as $activeService) {
+                    $incomingData = $newServices->firstWhere('service_type', $activeService->service_type);
+
+                    if (!$incomingData) {
+                        // Khách hủy dịch vụ này -> chốt sổ đóng lại
+                        $activeService->update(['expiry_date' => $today]);
+                    } else {
+                        // Khách vẫn giữ dịch vụ, kiểm tra xem có đổi giá hoặc số lượng không
+                        $priceChanged = $activeService->custom_price !== ($incomingData['custom_price'] ?? null);
+                        $quantityChanged = $activeService->quantity !== $incomingData['quantity'];
+
+                        if ($priceChanged || $quantityChanged) {
+                            // Chốt sổ mức giá/số lượng cũ
+                            $activeService->update(['expiry_date' => $today]);
+
+                            // Tạo record mới áp dụng từ hôm nay
+                            $lease->serviceItems()->create([
+                                'service_type'   => $incomingData['service_type'],
+                                'quantity'       => $incomingData['quantity'],
+                                'custom_price'   => $incomingData['custom_price'] ?? null,
+                                'effective_date' => $today,
+                                'expiry_date'    => null,
+                            ]);
+                        }
                     }
+                }
+
+                // Xử lý các dịch vụ MỚI TINH khách vừa đăng ký thêm
+                $existingTypes = $activeServices->pluck('service_type')->toArray();
+                $addedServices = $newServices->whereNotIn('service_type', $existingTypes);
+
+                foreach ($addedServices as $addedService) {
+                    $lease->serviceItems()->create([
+                        'service_type'   => $addedService['service_type'],
+                        'quantity'       => $addedService['quantity'],
+                        'custom_price'   => $addedService['custom_price'] ?? null,
+                        'effective_date' => $today,
+                        'expiry_date'    => null,
+                    ]);
                 }
             }
         });
