@@ -8,6 +8,7 @@ use App\Http\Requests\Invoice\StoreInvoiceRequest;
 use App\Http\Resources\Invoice\InvoiceResource;
 use App\Models\Invoice;
 use App\Services\InvoiceService;
+use App\Services\SettingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules\In;
@@ -40,6 +41,7 @@ class InvoiceController extends Controller
                 'room:id,property_id,name',
                 'property:id,user_id,name',
                 'items',
+                'meterReadings',
             ])
             ->whereHas('lease.room.property', function ($query) use ($request): void {
                 $query->where('user_id', $request->user()->id);
@@ -251,5 +253,11 @@ class InvoiceController extends Controller
         );
 
         return response()->json(['data' => $data]);
+    }
+
+    public function previewHtml(int $id, Request $request, SettingService $settingService)
+    {
+        $html = $settingService->compileInvoiceHtml($id, $request->user()->id);
+        return response()->json(['html' => $html]);
     }
 }

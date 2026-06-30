@@ -181,9 +181,41 @@ class SettingService
      */
     public function generateInvoicePdf(int $invoiceId, int $userId)
     {
+
+        // Gọi hàm dùng chung lấy HTML rột
+        $compiledHtml = $this->compileInvoiceHtml($invoiceId, $userId);
+
+        // 6. Bọc toàn bộ nội dung vào khung HTML chuẩn để ép font tiếng Việt (DejaVu Sans)
+        $fullHtml = <<<HTML
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+            <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+            <style>
+                body { 
+                    font-family: 'DejaVu Sans', sans-serif; 
+                    font-size: 14px;
+                    line-height: 1.5;
+                    color: #1e293b;
+                }
+            </style>
+        </head>
+        <body>
+            {$compiledHtml}
+        </body>
+        </html>
+        HTML;
+
+        // 7. Khởi tạo PDF
+        return Pdf::loadHTML($fullHtml)->setPaper('A5', 'portrait')->setWarnings(false);
+    }
+
+
+    public function compileInvoiceHtml(int $invoiceId, int $userId): string
+    {
         // 1. Lấy dữ liệu hóa đơn thực tế kèm theo các relation cần thiết
         // Cần lấy items để render bảng, lease.tenant để lấy tên khách, room.property.user để lấy tên chủ
-        $invoice = \App\Models\Invoice::with(['items', 'lease.tenant', 'room.property.user'])
+        $invoice = \App\Models\Invoice::with(['items', 'meterReadings', 'lease.tenant', 'room.property.user'])
             ->whereHas('room.property', function ($query) use ($userId) {
                 $query->where('user_id', $userId);
             })
@@ -199,8 +231,7 @@ class SettingService
                      </div>';
         }
 
-        // 3. Render bảng HTML chi tiết các khoản thu (Items)
-        // Đây là điểm khác biệt cốt lõi so với hợp đồng
+        // 3. Render bảng HTML chi tiết các khoản thu (Đã thêm chú thích)
         $itemsHtml = '<table style="width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 15px;">
                         <thead>
                             <tr style="background-color: #f8fafc;">
@@ -214,14 +245,33 @@ class SettingService
 
         foreach ($invoice->items as $item) {
             $qty = (float) $item->quantity;
+            $free = (float) $item->free_quantity_snapshot;
             $price = number_format((float) $item->unit_price_snapshot, 0, ',', '.');
             $amount = number_format((float) $item->amount, 0, ',', '.');
 
+            // -- LOGIC GHI CHÚ CHỈ SỐ --
+            $detailText = '';
+            if (in_array($item->charge_type, ['electricity', 'water'])) {
+                $meter = $invoice->meterReadings->where('type', $item->charge_type)->first();
+                if ($meter) {
+                    $detailText = "<br><span style='font-size: 11px; color: #64748b; font-weight: normal;'>(Số cũ: {$meter->previous_reading} - Số mới: {$meter->current_reading}";
+                    if ($free > 0) $detailText .= " - Miễn phí: {$free}";
+                    $detailText .= ")</span>";
+                } elseif ($free > 0) {
+                    $detailText = "<br><span style='font-size: 11px; color: #64748b; font-weight: normal;'>(Được miễn phí: {$free} {$item->unit})</span>";
+                }
+            } elseif ($free > 0) {
+                $detailText = "<br><span style='font-size: 11px; color: #64748b; font-weight: normal;'>(Được miễn phí: {$free} {$item->unit})</span>";
+            }
+
+            // Gắn $detailText ngay dưới Tên dịch vụ
             $itemsHtml .= "<tr>
-                <td style='border: 1px solid #e2e8f0; padding: 10px;'>{$item->description}</td>
-                <td style='border: 1px solid #e2e8f0; padding: 10px; text-align: center;'>{$qty} {$item->unit}</td>
+                <td style='border: 1px solid #e2e8f0; padding: 10px;'>
+                    <strong>{$item->description}</strong>{$detailText}
+                </td>
+                <td style='border: 1px solid #e2e8f0; padding: 10px; text-align: center;'>{$qty}</td>
                 <td style='border: 1px solid #e2e8f0; padding: 10px; text-align: right;'>{$price}</td>
-                <td style='border: 1px solid #e2e8f0; padding: 10px; text-align: right;'>{$amount}</td>
+                <td style='border: 1px solid #e2e8f0; padding: 10px; text-align: right; font-weight: bold;'>{$amount}</td>
             </tr>";
         }
         $itemsHtml .= '</tbody></table>';
@@ -265,31 +315,7 @@ class SettingService
             '{{INVOICE_ITEMS_TABLE}}' => $itemsHtml,
         ];
 
-        // 5. Thay thế biến thành dữ liệu thật
-        $compiledHtml = str_replace(array_keys($replacePairs), array_values($replacePairs), $html);
-
-        // 6. Bọc toàn bộ nội dung vào khung HTML chuẩn để ép font tiếng Việt (DejaVu Sans)
-        $fullHtml = <<<HTML
-        <!DOCTYPE html>
-        <html lang="vi">
-        <head>
-            <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-            <style>
-                body { 
-                    font-family: 'DejaVu Sans', sans-serif; 
-                    font-size: 14px;
-                    line-height: 1.5;
-                    color: #1e293b;
-                }
-            </style>
-        </head>
-        <body>
-            {$compiledHtml}
-        </body>
-        </html>
-        HTML;
-
-        // 7. Khởi tạo PDF
-        return Pdf::loadHTML($fullHtml)->setPaper('A5', 'portrait')->setWarnings(false);
+        // Trả về HTML đã thay thế dữ liệu thật
+        return str_replace(array_keys($replacePairs), array_values($replacePairs), $html);
     }
 }

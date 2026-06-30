@@ -120,7 +120,7 @@ class InvoiceResource extends JsonResource
 
                     'tenant' => $this->when(
                         $this->lease->relationLoaded('tenant') && $this->lease->tenant,
-                        fn () => [
+                        fn() => [
                             'id' => $this->lease->tenant->id,
                             'full_name' => $this->lease->tenant->full_name,
                             'phone' => $this->lease->tenant->phone,
@@ -129,7 +129,7 @@ class InvoiceResource extends JsonResource
 
                     'room' => $this->when(
                         $this->lease->relationLoaded('room') && $this->lease->room,
-                        fn () => [
+                        fn() => [
                             'id' => $this->lease->room->id,
                             'name' => $this->lease->room->name,
                             'property_id' => $this->lease->room->property_id,
@@ -139,7 +139,7 @@ class InvoiceResource extends JsonResource
             }),
 
             'items' => $this->whenLoaded('items', function () {
-                return $this->items->map(fn ($item): array => [
+                return $this->items->map(fn($item): array => [
                     'id' => $item->id,
                     'invoice_id' => $item->invoice_id,
                     'service_price_id' => $item->service_price_id,
@@ -154,8 +154,17 @@ class InvoiceResource extends JsonResource
                 ])->values();
             }),
 
+            'meter_readings' => $this->whenLoaded('meterReadings', function () {
+                return $this->meterReadings->map(fn($mr) => [
+                    'id' => $mr->id,
+                    'type' => $mr->type,
+                    'previous_reading' => (int) $mr->previous_reading,
+                    'current_reading' => (int) $mr->current_reading,
+                ])->values();
+            }),
+
             'allocations' => $this->whenLoaded('allocations', function () {
-                return $this->allocations->map(fn ($allocation): array => [
+                return $this->allocations->map(fn($allocation): array => [
                     'id' => $allocation->id,
                     'financial_transaction_id' => $allocation->financial_transaction_id,
                     'invoice_id' => $allocation->invoice_id,

@@ -130,6 +130,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     // Route xuất PDF hóa đơn (Có thể đặt tiền tố /invoices cho chuẩn RESTful)
     Route::get('/invoices/{id}/export-pdf', [SettingController::class, 'exportInvoicePdf']);
+    Route::get('/invoices/{id}/preview', [InvoiceController::class, 'previewHtml']);
 
     // ── Financial Transactions (Thu chi) ─────────────────────────────────────
     Route::get('financial-transactions', [FinancialTransactionController::class, 'index'])
