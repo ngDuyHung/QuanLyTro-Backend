@@ -23,6 +23,7 @@ class PropertyController extends Controller
     public function index(Request $request): JsonResponse
     {
         $properties = $this->propertyQueryWithRoomStats($request)
+            // 1. Tìm kiếm theo text
             ->when($request->filled('search'), function ($query) use ($request) {
                 $search = trim((string) $request->search);
 
@@ -33,7 +34,30 @@ class PropertyController extends Controller
                         ->orWhere('address', 'like', "%{$search}%");
                 });
             })
-            ->latest()
+            // 2. Lọc theo trạng thái (active / inactive)
+            ->when($request->filled('status'), function ($query) use ($request) {
+                $status = $request->input('status');
+                // Chỉ lọc nếu status hợp lệ để tránh lỗi
+                if (in_array($status, ['active', 'inactive'])) {
+                    $query->where('status', $status);
+                }
+            })
+            // 3. Xử lý sắp xếp (sort)
+            ->when($request->filled('sort'), function ($query) use ($request) {
+                $sort = $request->input('sort');
+
+                // Dùng match (PHP 8.0+) để xử lý code gọn gàng
+                match ($sort) {
+                    'oldest'    => $query->oldest(),
+                    'name_asc'  => $query->orderBy('name', 'asc'),
+                    'name_desc' => $query->orderBy('name', 'desc'),
+                    default     => $query->latest(), // 'newest' hoặc giá trị không hợp lệ sẽ lấy mới nhất
+                };
+            }, function ($query) {
+                // Mặc định nếu Frontend không gửi tham số sort, luôn sắp xếp mới nhất
+                $query->latest();
+            })
+            // 4. Phân trang
             ->paginate($request->integer('per_page', 15));
 
         return PropertyResource::collection($properties)->response();

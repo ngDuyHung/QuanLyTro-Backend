@@ -38,7 +38,7 @@ class SettingService
         );
     }
 
-    // Thêm hàm mới này vào SettingService.php
+    // hàm biên dịch HTML hợp đồng với dữ liệu thực tế của hợp đồng
     public function compileLeaseHtml(int $leaseId, int $userId): string
     {
         $lease = \App\Models\Lease::with(['tenant', 'room.property.user', 'serviceItems'])
@@ -55,6 +55,7 @@ class SettingService
                      </div>';
         }
 
+        // Lấy danh sách dịch vụ kèm theo hợp đồng và hiển thị ra HTML
         $applicablePrices = \App\Models\ServicePrice::getApplicablePrices((int)$lease->room->property_id);
         $servicesHtml = '<ul style="margin-top: 5px; margin-bottom: 15px; list-style-type: disc; padding-left: 20px;">';
         $activeServices = $lease->serviceItems->whereNull('expiry_date');

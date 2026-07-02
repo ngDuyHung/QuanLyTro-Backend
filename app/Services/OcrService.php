@@ -37,7 +37,7 @@ Chỉ trả về JSON hợp lệ, không kèm markdown, theo cấu trúc:
 }
 PROMPT;
 
-        // 3. Gọi API (Sử dụng model gemini-3.1-flash-lite tốt nhất cho ảnh)
+        // 3. Gọi API (Sử dụng model gemini-3.1-flash-lite )
         $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=' . $apiKey;
 
         $response = Http::timeout(30)->post($url, [
@@ -54,9 +54,9 @@ PROMPT;
                     ]
                 ]
             ],
-            // Ép Gemini trả về chuẩn JSON như mẫu của bạn
+            // Ép Gemini trả về chuẩn JSON
             'generationConfig' => [
-                'temperature' => 0.1, // Nhiệt độ thấp để AI trả lời chính xác, không sáng tạo thêm
+                'temperature' => 0.1,
                 'responseMimeType' => 'application/json',
             ],
         ]);
