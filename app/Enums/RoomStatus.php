@@ -9,6 +9,7 @@ enum RoomStatus: string
     case Available   = 'available';
     case Occupied    = 'occupied';
     case Maintenance = 'maintenance';
+    case Reserved = 'reserved';
 
     public function label(): string
     {
@@ -16,6 +17,7 @@ enum RoomStatus: string
             self::Available   => 'Còn trống',
             self::Occupied    => 'Đang thuê',
             self::Maintenance => 'Đang sửa chữa',
+            self::Reserved => 'Đã đặt cọc',
         };
     }
 
@@ -27,5 +29,10 @@ enum RoomStatus: string
     public function isRented(): bool
     {
         return $this === self::Occupied;
+    }
+
+    public function isReserved(): bool
+    {
+        return $this === self::Reserved;
     }
 }

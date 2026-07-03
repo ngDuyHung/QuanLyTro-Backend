@@ -58,7 +58,7 @@ return new class extends Migration
                 ->default(false)
                 ->comment('Có đăng phòng lên trang công khai hay không');
 
-            $table->enum('status', ['available', 'occupied', 'maintenance'])
+            $table->enum('status', ['available', 'occupied', 'maintenance','reserved'])
                 ->default('available')
                 ->comment('Tình trạng phòng');
 

@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\FinancialTransactionController;
 use App\Http\Controllers\Api\V1\ImportController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\OcrController;
+use App\Http\Controllers\Api\V1\RoomReservationController;
 use App\Http\Controllers\Api\V1\SepayConfigController;
 use App\Http\Controllers\Api\V1\SettingController;
 use App\Http\Controllers\Api\V1\UtilityController;
@@ -60,6 +61,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::put('rooms/{room}', [RoomController::class, 'update'])->name('rooms.update');
     Route::delete('rooms/{room}', [RoomController::class, 'destroy'])->name('rooms.destroy');
     Route::patch('rooms/{room}/status', [RoomController::class, 'updateStatus'])->name('rooms.status');
+
+    // ── Room Reservations (Cọc giữ chỗ) ────────────────────────────────────
+    Route::post('room-reservations', [RoomReservationController::class, 'store'])->name('room-reservations.store');
+    Route::patch('room-reservations/{id}/cancel', [RoomReservationController::class, 'cancel'])->name('room-reservations.cancel');
+    Route::patch('room-reservations/{id}/extend', [RoomReservationController::class, 'extend'])->name('room-reservations.extend');
 
     // ── Tenants — chỉ xem/sửa/xóa (tạo mới qua POST /leases) ───────────────
     Route::post('tenants', [TenantController::class, 'store'])->name('tenants.store');
