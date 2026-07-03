@@ -97,7 +97,17 @@ class RoomController extends Controller
                         });
                 });
             })
-            ->latest()
+            ->when($request->filled('sort'), function ($query) use ($request) {
+                match ($request->sort) {
+                    'price_asc' => $query->orderBy('current_price', 'asc'),
+                    'price_desc' => $query->orderBy('current_price', 'desc'),
+                    'created_at_asc' => $query->orderBy('created_at', 'asc'),
+                    default => $query->orderBy('created_at', 'desc'), // created_at_desc
+                };
+            }, function ($query) {
+                // Mặc định nếu không gửi tham số sort
+                $query->orderBy('created_at', 'desc');
+            })
             ->paginate($request->integer('per_page', 10));
 
         return RoomResource::collection($rooms)
