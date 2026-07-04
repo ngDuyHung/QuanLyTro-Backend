@@ -114,10 +114,11 @@ return new class extends Migration
                     'water',
                     'garbage',
                     'internet',
-                    'previous_debt',
+                    'previous_debt',// nợ cũ
                     'damage_fee',
                     'discount',
-                    'surcharge',
+                    'surcharge', // phụ thu
+                    'deposit', //tiền thế chân
                     'other',
                 ])
                 ->comment('Loại khoản phí trong hóa đơn');

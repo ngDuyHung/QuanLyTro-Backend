@@ -509,6 +509,40 @@ class InvoiceService
             ];
         }
 
+
+        // LOGIC TỰ ĐỘNG THÊM TIỀN THẾ CHÂN (CHO HÓA ĐƠN ĐẦU TIÊN)
+        // 1. Kiểm tra xem hợp đồng này đã có hóa đơn nào chưa (bỏ qua hóa đơn đã hủy)
+        $hasInvoice = \App\Models\Invoice::where('lease_id', $lease->id)
+            ->where('status', '!=', 'cancelled')
+            ->exists();
+
+        // 2. Nếu là hóa đơn đầu tiên (chưa từng tạo) và hợp đồng có yêu cầu tiền cọc
+        if (!$hasInvoice && $lease->deposit > 0) {
+
+            // Tìm số tiền khách đã cọc (Chỉ lấy đúng phiếu cọc của hợp đồng này)
+            $reservationDeposit = \App\Models\RoomReservation::where('lease_id', $lease->id)
+                ->where('status', 'completed')
+                ->sum('deposit_amount');
+
+            // Tính số dư cọc cần thu
+            $remainingDeposit = (int)$lease->deposit - $reservationDeposit;
+
+            // Nếu số tiền phải thu lớn hơn 0 thì nhét vào mảng gợi ý (Frontend sẽ hiện vào mục Dịch vụ khác)
+            if ($remainingDeposit > 0) {
+                $items[] = [
+                    'charge_type'            => 'deposit',
+                    'description'            => 'Tiền thế chân (đã trừ: ' .$reservationDeposit.'đ)',
+                    'unit'                   => 'Lần',
+                    'quantity'               => 1,
+                    'unit_price_snapshot'    => $remainingDeposit,
+                    'free_quantity_snapshot' => 0,
+                    'amount'                 => $remainingDeposit,
+                    'is_utility'             => false,
+                    'is_chot_roi'            => false
+                ];
+            }
+        }
+
         return [
             'lease_id' => $lease->id,
             'room_name' => $lease->room->name,

@@ -133,4 +133,9 @@ class Room extends Model
             ->where('status', 'active')
             ->latestOfMany();
     }
+
+    public function reservations(): HasMany
+    {
+        return $this->hasMany(RoomReservation::class);
+    }
 }

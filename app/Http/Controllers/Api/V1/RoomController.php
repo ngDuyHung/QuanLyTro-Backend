@@ -45,6 +45,8 @@ class RoomController extends Controller
                 ->with('tenant:id,full_name,phone,email,id_card_number')
                 ->orderByRaw("role = 'representative' desc")
                 ->orderBy('id'),
+            'reservations' => fn($query) => $query
+                ->where('status', 'pending')
         ])
             ->where('property_id', $property->id)
             ->when(
@@ -72,6 +74,7 @@ class RoomController extends Controller
                 ->with('tenant:id,full_name,phone,email,id_card_number')
                 ->orderByRaw("role = 'representative' desc")
                 ->orderBy('id'),
+            'reservations' => fn($query) => $query->where('status', 'pending')
         ])
             ->whereHas(
                 'property',
@@ -131,6 +134,7 @@ class RoomController extends Controller
                 ->with('tenant:id,full_name,phone,email,id_card_number')
                 ->orderByRaw("role = 'representative' desc")
                 ->orderBy('id'),
+            'reservations' => fn($query) => $query->where('status', 'pending')
         ])
             ->whereHas('property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);

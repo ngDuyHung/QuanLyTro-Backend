@@ -92,7 +92,7 @@ class RoomResource extends JsonResource
                     ],
                 ];
             }),
-
+            // Danh sách người đang ở hiện tại (nếu có)
             'current_residents' => $this->whenLoaded(
                 'currentResidents',
                 fn() => $this->currentResidents->map(fn($resident) => [
@@ -126,6 +126,28 @@ class RoomResource extends JsonResource
                     ->firstWhere('role', 'representative');
 
                 return $representative?->tenant?->phone;
+            }),
+
+            'pending_reservation' => $this->whenLoaded('reservations', function () {
+                $reservationCollection = $this->reservations;
+
+                // 2. Vì nó là Collection, nên dùng hàm isEmpty() để check
+                if ($reservationCollection->isEmpty()) {
+                    return null;
+                }
+
+                // 3. Rút lấy cái đầu tiên
+                $reservation = $reservationCollection->first();
+
+                return [
+                    'id' => $reservation->id,
+                    'tenant_name' => $reservation->tenant_name,
+                    'tenant_phone' => $reservation->tenant_phone,
+                    'deposit_amount' => $reservation->deposit_amount,
+                    'expected_move_in_date' => $reservation->expected_move_in_date?->toDateString(),
+                    'status' => $reservation->status,
+                    'note' => $reservation->note,
+                ];
             }),
         ];
     }

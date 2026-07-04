@@ -11,6 +11,7 @@ class RoomReservation extends Model
 {
     protected $fillable = [
         'room_id',
+        'lease_id',
         'tenant_name',
         'tenant_phone',
         'deposit_amount',
@@ -27,5 +28,11 @@ class RoomReservation extends Model
     public function room(): BelongsTo
     {
         return $this->belongsTo(Room::class);
+    }
+
+    // một đặt cọc thuộc về một hợp đồng thuê
+    public function lease(): BelongsTo
+    {
+        return $this->belongsTo(Lease::class);
     }
 }

@@ -43,6 +43,7 @@ class StoreInvoiceRequest extends FormRequest
                     'damage_fee',
                     'discount',
                     'surcharge',
+                    'deposit',
                     'other'
                 ]),
             ],

@@ -72,6 +72,11 @@ class LeaseService
                     'status' => LeaseStatus::Active->value,
                 ]);
 
+                // gắn lease_id vào reservation nếu có
+                if ($reservation) {
+                    $reservation->update(['lease_id' => $lease->id]);
+                }
+
                 $this->tenantService->createRepresentativeResidence(
                     tenant: $tenant,
                     lease: $lease,
