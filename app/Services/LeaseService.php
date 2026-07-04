@@ -12,6 +12,7 @@ use App\Models\Lease;
 use App\Models\LeaseMember;
 use App\Models\MeterReading;
 use App\Models\Room;
+use App\Models\RoomReservation;
 use App\Models\RoomResident;
 use App\Models\Tenant;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +33,16 @@ class LeaseService
 
         try {
             return DB::transaction(function () use ($data, $userId, &$createdTenantId): Lease {
+                //Tìm phiếu cọc giữ chỗ (nếu có) để cập nhật trạng thái phòng    
+                $reservation = RoomReservation::where('room_id', $data['room_id'])
+                    ->where('status', 'pending')
+                    ->first();
+                // Nếu có phiếu cọc giữ chỗ, cập nhật trạng thái phòng về trống trước khi tạo hợp đồng
+                if ($reservation) {
+                    $reservation->update(['status' => 'completed']);
+                    $reservation->room->update(['status' => RoomStatus::Available->value]);
+                }
+
                 $room = Room::whereHas(
                     'property',
                     fn($query) => $query->where('user_id', $userId)
