@@ -34,9 +34,19 @@ class ImportController extends Controller
                 ], 422);
             }
 
+            // NẾU CÓ BẤT KỲ DÒNG NÀO THẤT BẠI (Dù các dòng khác thành công), 
+            // Trả về mã 422 để Frontend bắt buộc phải bung bảng danh sách lỗi ra cho chủ nhà xem.
+            if ($report['failed_count'] > 0) {
+                return response()->json([
+                    'message' => "Import hoàn tất một phần. Thành công: {$report['success_count']} dòng. Thất bại: {$report['failed_count']} dòng. Vui lòng xem chi tiết lỗi!",
+                    'data'    => $report
+                ], 422); // Mã 422 Unprocessable Entity
+            }
+
+            // Nếu thành công 100% không có lỗi nào
             return response()->json([
-                'message' => "Import hoàn tất. Thành công: {$report['success_count']} dòng, Thất bại: {$report['failed_count']} dòng.",
-                'data' => $report
+                'message' => "Tuyệt vời! Đã import thành công toàn bộ {$report['success_count']} dòng dữ liệu.",
+                'data'    => $report
             ], 200);
         } catch (Throwable $exception) {
             return response()->json([

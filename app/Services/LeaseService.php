@@ -256,33 +256,42 @@ class LeaseService
 
         /* |--------------------------------------------------------------------------
         | BỔ SUNG: TỰ ĐỘNG GÁN DỊCH VỤ ĐI KÈM CHO HỢP ĐỒNG IMPORT
-        | Lấy giá dịch vụ ưu tiên của khu nhà, nếu không có lấy giá global mặc định
+        | Lấy giá khu nhà (Sheet 2) -> Check ghi đè giá HĐ (Sheet 3)
         |--------------------------------------------------------------------------
         */
         $room = \App\Models\Room::find($roomId);
 
         if ($room) {
-            // 1. Lấy giá riêng của khu nhà
+            // Lấy toàn bộ cấu hình giá của khu nhà
             $propertyPrices = \App\Models\ServicePrice::where('property_id', $room->property_id)
                 ->get()
                 ->keyBy(fn($p) => $p->service_type->value ?? $p->service_type);
 
-            // 2. Lấy giá mặc định (global) cho các loại DV chưa có giá riêng
             $assignedTypes = $propertyPrices->keys()->all();
+
+            // Lấy thêm giá mặc định hệ thống nếu khu nhà chưa cài đủ 4 loại
             $globalPrices = \App\Models\ServicePrice::whereNull('property_id')
                 ->when(!empty($assignedTypes), fn($q) => $q->whereNotIn('service_type', $assignedTypes))
                 ->get()
                 ->keyBy(fn($p) => $p->service_type->value ?? $p->service_type);
 
-            // 3. Kết hợp lại thành danh sách dịch vụ áp dụng cho phòng này
             $mergedPrices = $propertyPrices->merge($globalPrices)->values();
 
-            // 4. Gắn toàn bộ vào hợp đồng mới tạo
+            // Mảng giá thỏa thuận riêng truyền từ Sheet3LeaseTenantImport
+            $customServices = $data['custom_services'] ?? [];
+
             foreach ($mergedPrices as $service) {
+                $serviceType = $service->service_type->value ?? $service->service_type;
+
+                // Nếu Sheet 3 có điền số -> Dùng số đó làm custom_price
+                // Nếu Sheet 3 bỏ trống (null) -> custom_price = null (tức là lấy giá khu nhà/hệ thống)
+                $excelPrice = $customServices[$serviceType] ?? null;
+                $finalCustomPrice = ($excelPrice !== null && $excelPrice !== '') ? (int)$excelPrice : null;
+
                 $lease->serviceItems()->create([
-                    'service_type' => $service->service_type,
-                    'quantity'     => 1,    // Mặc định gán số lượng là 1 khi import
-                    'custom_price' => $service->unit_price, // Null để hệ thống tự mapping với bảng giá gốc
+                    'service_type'   => $serviceType,
+                    'quantity'       => 1, // Khi import, ta mặc định số lượng = 1
+                    'custom_price'   => $finalCustomPrice,
                     'effective_date' => $data['lease_start_date'],
                     'expiry_date'    => null,
                 ]);
