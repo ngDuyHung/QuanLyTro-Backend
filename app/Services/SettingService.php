@@ -260,7 +260,7 @@ class SettingService
                 <td style='border: 1px solid #e2e8f0; padding: 10px;'>
                     <strong>{$item->description}</strong>{$detailText}
                 </td>
-                <td style='border: 1px solid #e2e8f0; padding: 10px; text-align: center;'>{$qty}</td>
+                <td style='border: 1px solid #e2e8f0; padding: 10px; text-align: center;'>{$qty} {$item->unit}</td>
                 <td style='border: 1px solid #e2e8f0; padding: 10px; text-align: right;'>{$price}</td>
                 <td style='border: 1px solid #e2e8f0; padding: 10px; text-align: right; font-weight: bold;'>{$amount}</td>
             </tr>";
