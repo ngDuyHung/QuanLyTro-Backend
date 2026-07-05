@@ -117,6 +117,14 @@ class Room extends Model
     }
 
     /**
+     * Phòng có nhiều hóa đơn.
+     */
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    /**
      * CHỈ lấy người đại diện hiện tại của phòng.
      */
     public function representative(): HasOne

@@ -46,7 +46,8 @@ class RoomController extends Controller
                 ->orderByRaw("role = 'representative' desc")
                 ->orderBy('id'),
             'reservations' => fn($query) => $query
-                ->where('status', 'pending')
+                ->where('status', 'pending'),
+            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue'])
         ])
             ->where('property_id', $property->id)
             ->when(
@@ -74,7 +75,8 @@ class RoomController extends Controller
                 ->with('tenant:id,full_name,phone,email,id_card_number')
                 ->orderByRaw("role = 'representative' desc")
                 ->orderBy('id'),
-            'reservations' => fn($query) => $query->where('status', 'pending')
+            'reservations' => fn($query) => $query->where('status', 'pending'),
+            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue'])
         ])
             ->whereHas(
                 'property',
@@ -104,6 +106,8 @@ class RoomController extends Controller
                 match ($request->sort) {
                     'price_asc' => $query->orderBy('current_price', 'asc'),
                     'price_desc' => $query->orderBy('current_price', 'desc'),
+                    'name_asc' => $query->orderBy('name', 'asc'),
+                    'name_desc' => $query->orderBy('name', 'desc'),
                     'created_at_asc' => $query->orderBy('created_at', 'asc'),
                     default => $query->orderBy('created_at', 'desc'), // created_at_desc
                 };
@@ -134,7 +138,8 @@ class RoomController extends Controller
                 ->with('tenant:id,full_name,phone,email,id_card_number')
                 ->orderByRaw("role = 'representative' desc")
                 ->orderBy('id'),
-            'reservations' => fn($query) => $query->where('status', 'pending')
+            'reservations' => fn($query) => $query->where('status', 'pending'),
+            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue'])
         ])
             ->whereHas('property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);

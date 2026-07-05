@@ -149,6 +149,15 @@ class RoomResource extends JsonResource
                     'note' => $reservation->note,
                 ];
             }),
+            // có hóa đơn chưa thanh toán hay không
+            'has_unpaid_invoice' => $this->whenLoaded('invoices', function () {
+                return $this->invoices->isNotEmpty();
+            }),
+
+            // tổng số tiền còn nợ (chưa thanh toán) của các hóa đơn
+            'unpaid_amount' => $this->whenLoaded('invoices', function () {
+                return $this->invoices->sum('remaining_amount');
+            }),
         ];
     }
 }

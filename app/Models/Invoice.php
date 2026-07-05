@@ -163,7 +163,7 @@ class Invoice extends Model
     }
 
     // ===== Scopes =====
-
+    // Các scope để lọc hóa đơn theo trạng thái, theo hợp đồng, theo khu nhà.
     public function scopeDraft(Builder $query): void
     {
         $query->where('status', 'draft');
