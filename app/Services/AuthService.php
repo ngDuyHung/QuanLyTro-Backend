@@ -166,6 +166,19 @@ class AuthService
         return $this->issueToken($user);
     }
 
+    //Hàm tạo tài khoản cho người thuê đại diện hợp đồng
+    public function registerTenant(array $data): User
+    {
+        $data['password']  = Hash::make($data['password']);
+        $data['is_active'] = true;
+
+        $user = User::create($data);
+
+        $user->assignRole('tenant');
+
+        return $user;
+    } 
+
     public function logout(User $user): void
     {
         $token = $user->currentAccessToken();

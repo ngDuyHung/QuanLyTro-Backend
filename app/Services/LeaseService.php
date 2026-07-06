@@ -21,7 +21,8 @@ use Throwable;
 class LeaseService
 {
     public function __construct(
-        private readonly TenantService $tenantService
+        private readonly TenantService $tenantService,
+        private readonly AuthService $authService
     ) {}
 
     /**
@@ -58,7 +59,19 @@ class LeaseService
                     throw new BusinessException("Phòng \"{$room->name}\" đang có hợp đồng thuê khác chưa kết thúc.");
                 }
 
-                $tenant = $this->tenantService->createProfile($data['tenant']);
+                //Tạo tài khoản cho khách đại diện hợp đồng
+                $accountTenat =  $this->authService->registerTenant([
+                    'name' => $data['tenant']['full_name'],
+                    'phone'     => $data['tenant']['phone'],
+                    'email'     => $data['tenant']['email'],
+                    'password'  => $data['tenant']['phone'],
+                    'is_active' => true,
+                ]);
+
+                $tenant = $this->tenantService->createProfile(array_merge($data['tenant'], ['user_id' => $accountTenat->id]));
+
+
+
                 $createdTenantId = $tenant->id;
 
                 $lease = Lease::create([

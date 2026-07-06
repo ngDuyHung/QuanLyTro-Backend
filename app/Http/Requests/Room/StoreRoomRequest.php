@@ -24,6 +24,7 @@ class StoreRoomRequest extends FormRequest
             'area'          => ['nullable', 'numeric', 'min:1', 'max:9999.99'],
             'max_occupants' => ['nullable', 'integer', 'min:0', 'max:255'],
             'current_price' => ['required', 'integer', 'min:0'],
+            'deposit_amount' => ['nullable', 'integer', 'min:0'],
             'floor_number' => ['nullable', 'integer', 'min:-1', 'max:200'],
             'billing_day'   => ['nullable', 'integer', 'min:1', 'max:31'],
             'allow_shared'  => ['nullable', 'boolean'],
@@ -59,6 +60,10 @@ class StoreRoomRequest extends FormRequest
             'current_price.integer' => 'Giá phòng phải là số nguyên.',
             'current_price.min' => 'Giá phòng không được âm.',
 
+            'deposit_amount.required' => 'Số tiền cọc/thế chân không được để trống.',
+            'deposit_amount.integer' => 'Số tiền cọc/thế chân phải là số nguyên.',
+            'deposit_amount.min' => 'Số tiền cọc/thế chân không được âm.',
+
             'billing_day.integer' => 'Ngày thu tiền phải là số nguyên.',
             'billing_day.min' => 'Ngày thu tiền phải từ 1 đến 31.',
             'billing_day.max' => 'Ngày thu tiền phải từ 1 đến 31.',
@@ -88,6 +93,7 @@ class StoreRoomRequest extends FormRequest
             'area'          => 'diện tích',
             'max_occupants' => 'số người tối đa',
             'current_price' => 'giá phòng',
+            'deposit_amount' => 'số tiền cọc/thế chân',
             'floor_number' => 'tầng',
             'billing_day'   => 'ngày thu tiền',
             'allow_shared'  => 'cho phép ở ghép',

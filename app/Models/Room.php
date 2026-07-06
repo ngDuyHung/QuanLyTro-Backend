@@ -25,11 +25,13 @@ class Room extends Model
         'floor_number',
         'max_occupants',
         'current_price',
+        'deposit_amount',
         'billing_day', // Ngày trong tháng để tính tiền phòng, 0 nếu tính theo ngày vào
         'allow_shared', // Cho phép ở ghép
         'is_public', // Có đăng phòng lên trang công khai hay không
         'status',
         'description',
+        
     ];
 
     protected $casts = [
@@ -37,6 +39,7 @@ class Room extends Model
         'floor_number' => 'integer',
         'max_occupants' => 'integer',
         'current_price' => 'integer',
+        'deposit_amount' => 'integer',
         'billing_day'   => 'integer',
         'allow_shared'  => 'boolean',
         'is_public'     => 'boolean',

@@ -251,7 +251,13 @@ class SettingService
                 } elseif ($free > 0) {
                     $detailText = "<br><span style='font-size: 11px; color: #64748b; font-weight: normal;'>(Được miễn phí: {$free} {$item->unit})</span>";
                 }
-            } elseif ($free > 0) {
+            }
+            // BỔ SUNG ĐOẠN NÀY ĐỂ CHÚ THÍCH TIỀN THẾ CHÂN
+            elseif ($item->charge_type === 'deposit') {
+                $detailText = "<br><span style='font-size: 11px; color: #d97706; font-style: italic;'>* Khoản này sẽ được hoàn trả khi trả phòng nếu không phát sinh nợ/hư hỏng.</span>";
+            }
+            // GIỮ NGUYÊN PHẦN CÒN LẠI
+            elseif ($free > 0) {
                 $detailText = "<br><span style='font-size: 11px; color: #64748b; font-weight: normal;'>(Được miễn phí: {$free} {$item->unit})</span>";
             }
 

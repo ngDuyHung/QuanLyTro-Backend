@@ -31,7 +31,7 @@ class TenantService
                     'email' => $data['email'] ?? null,
                     'phone' => $data['phone'],
                     'id_card_number' => $data['id_card_number'],
-                    'user_id' => null,
+                    'user_id' => $data['user_id'] ?? null,
                 ]);
 
                 $imageUpdates = [];

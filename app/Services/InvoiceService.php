@@ -527,12 +527,20 @@ class InvoiceService
             // Tính số dư cọc cần thu
             $remainingDeposit = (int)$lease->deposit - $reservationDeposit;
 
-            // Nếu số tiền phải thu lớn hơn 0 thì nhét vào mảng gợi ý (Frontend sẽ hiện vào mục Dịch vụ khác)
+            // Nếu số tiền phải thu lớn hơn 0 thì nhét vào mảng gợi ý
             if ($remainingDeposit > 0) {
+                // Format lại số tiền cọc cũ cho đẹp (VD: 500.000)
+                $formattedResDeposit = number_format((float)$reservationDeposit, 0, ',', '.');
+
+                // Tạo câu mô tả rõ nghĩa, tránh gây hiểu lầm
+                $description = $reservationDeposit > 0
+                    ? "Tiền thế chân thu bổ sung (Đã trừ cọc: {$formattedResDeposit}đ)"
+                    : "Tiền thế chân (Thu 1 lần duy nhất)";
+
                 $items[] = [
                     'charge_type'            => 'deposit',
-                    'description'            => 'Tiền thế chân (đã trừ: ' .$reservationDeposit.'đ)',
-                    'unit'                   => 'Lần',
+                    'description'            => $description,
+                    'unit'                   => 'Khoản', // Đổi từ "Lần" sang "Khoản" nghe trang trọng hơn
                     'quantity'               => 1,
                     'unit_price_snapshot'    => $remainingDeposit,
                     'free_quantity_snapshot' => 0,

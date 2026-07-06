@@ -26,6 +26,8 @@ class RoomResource extends JsonResource
             'max_occupants' => $this->max_occupants,
 
             'current_price' => $this->current_price,
+            
+            'deposit_amount' => $this->deposit_amount,
 
             'billing_day' => $this->billing_day,
 

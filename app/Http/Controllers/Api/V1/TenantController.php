@@ -166,8 +166,16 @@ class TenantController extends Controller
 
         // 4. Xóa ảnh và xóa khách thuê
         Storage::disk('public')->deleteDirectory("tenants/{$tenant->id}");
+        // 5. Lưu trữ user_id để xử lý xóa tài khoản hệ thống sau khi xóa tenant
+        $userId = $tenant->user_id;
+
+        // Xóa hồ sơ khách thuê trước để tránh lỗi ràng buộc khóa ngoại (Foreign Key Constraint)
         $tenant->delete();
 
+        // 6. Xóa tài khoản hệ thống của khách thuê (nếu tồn tại)
+        if ($userId) {
+            \App\Models\User::where('id', $userId)->delete();
+        }
         return response()->json(['message' => 'Xóa khách thuê thành công.']);
     }
 
