@@ -172,6 +172,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('sepay-transactions/{id}/ignore', [SePayTransactionController::class, 'ignore'])
         ->name('sepay-transactions.ignore');
 
+    Route::get('invoices/{id}/payment-status', [SepayConfigController::class, 'checkPaymentStatus'])
+        ->name('invoices.payment-status');
 
     // ── Route OCR (Quét CCCD) ────────────────────────────────
     Route::post('ocr/scan-id-card', [OcrController::class, 'scanIdCard'])->name('ocr.scan');

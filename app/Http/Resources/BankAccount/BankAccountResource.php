@@ -33,10 +33,10 @@ class BankAccountResource extends JsonResource
 
             // Magic nằm ở đây: Trả về link template QR cho Frontend
             'sepay_qr_template' => sprintf(
-                'https://qr.sepay.vn/img?bank=%s&acc=%s&template=compact&amount={amount}&des=%s{invoice_code}',
+                'https://qr.sepay.vn/img?bank=%s&acc=%s&template=compact&amount={amount}&des={invoice_code}',
                 $this->bank_code,
                 $this->account_number,
-                $patternPrefix // Nối tiền tố vào trước mã (VD: HD{invoice_code})
+                //$patternPrefix // Nối tiền tố vào trước mã (VD: HD{invoice_code}) và bỏ %s trên link template QR đi, vì Sepay sẽ tự động nhận diện tiền tố này
             ),
 
             'created_at' => $this->created_at?->toDateTimeString(),

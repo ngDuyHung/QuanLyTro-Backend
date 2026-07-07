@@ -22,7 +22,7 @@ class SepayConfigController extends Controller
     public function save(SaveSepayConfigRequest $request): JsonResponse
     {
         $config = SepayConfig::forUser($request->user()->id);
-        
+
         $config->save($request->mappedData());
 
         return response()->json([
@@ -58,5 +58,21 @@ class SepayConfigController extends Controller
         }
 
         return response()->json(['message' => 'Kết nối thất bại. Vui lòng kiểm tra lại API Token.'], 402);
+    }
+
+    /**
+     * Polling: Lấy nhanh trạng thái thanh toán của hóa đơn
+     */
+    public function checkPaymentStatus(Request $request, int $id): JsonResponse
+    {
+        // Query nhẹ nhất có thể, không load bất kỳ relations (with) nào
+        $invoice = \App\Models\Invoice::query()
+            ->whereHas('lease.room.property', function ($query) use ($request): void {
+                $query->where('user_id', $request->user()->id);
+            })
+            ->select('id', 'status', 'paid_amount', 'remaining_amount')
+            ->findOrFail($id);
+
+        return response()->json(['data' => $invoice]);
     }
 }

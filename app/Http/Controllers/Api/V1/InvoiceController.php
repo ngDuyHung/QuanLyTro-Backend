@@ -67,6 +67,9 @@ class InvoiceController extends Controller
             ->when($request->query('period_to'), function ($query, $periodTo): void {
                 $query->whereDate('period_to', '<=', $periodTo);
             })
+            ->when($request->query('search'), function ($query, $search): void {
+                $query->where('invoice_code', 'like', '%' . $search . '%');
+            })
             ->latest()
             ->paginate($request->integer('per_page', 15));
 

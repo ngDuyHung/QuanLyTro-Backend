@@ -392,6 +392,10 @@ class RoomController extends Controller
             ->where('status', RoomStatus::Occupied->value)
             ->sum('current_price');
 
+        $reserved = (clone $baseQuery)
+            ->whereHas('reservations', fn($q) => $q->where('status', 'pending'))
+            ->count();
+
         $percent = fn(int $value): int => $total > 0
             ? (int) round(($value / $total) * 100)
             : 0;
@@ -402,15 +406,13 @@ class RoomController extends Controller
             'occupied' => $occupied,
             'available' => $available,
             'maintenance' => $maintenance,
+            'reserved' => $reserved,
 
             'occupancy_rate' => $percent($occupied),
             'available_rate' => $percent($available),
             'maintenance_rate' => $percent($maintenance),
-
-            // Tạm tính theo tổng giá phòng đang thuê.
-            // Sau này có module hóa đơn/thanh toán thì đổi sang doanh thu thực tế.
-            'expected_monthly_revenue' => (int) $expectedMonthlyRevenue,
-
+            'reserved_rate' => $percent($reserved),
+            
             // Chưa có module công nợ/hóa đơn thì tạm để 0.
             'debt_rooms' => 0,
             'debt_rate' => 0,
