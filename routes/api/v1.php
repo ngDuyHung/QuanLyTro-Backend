@@ -196,6 +196,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('imports/master-data', [ImportController::class, 'importMasterData']);
     // API Tải file Excel mẫu để điền dữ liệu import
     Route::get('imports/master-data/template', [ImportController::class, 'downloadTemplate']);
+
+    // ── Route Notifications (Thông báo) ─────────────────────────────────────────────
+    Route::apiResource('notifications', \App\Http\Controllers\Api\V1\NotificationController::class);
 });
 
 // 1. THÊM ROUTE WEBHOOK VÀO PHẦN PUBLIC (Nằm ngoài auth:sanctum)

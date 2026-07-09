@@ -21,7 +21,7 @@ return new class extends Migration
             $table->id()->comment('ID bản ghi giá dịch vụ');
             $table->unsignedBigInteger('property_id')->nullable()
                 ->comment('FK properties - NULL = giá mặc định, value = giá riêng cho khu');
-            $table->enum('service_type', ['electricity', 'water', 'garbage', 'internet'])
+            $table->enum('service_type', ['electricity', 'water', 'garbage', 'internet','garbage','parking','cleaning','elevator','management','other'])
                 ->comment('Loại dịch vụ');
             $table->unsignedBigInteger('unit_price')
                 ->comment('Giá đơn vị (VND/kWh hoặc VND/m³ hoặc cố định/tháng)');

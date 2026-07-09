@@ -157,21 +157,28 @@ class PropertyController extends Controller
             $property->update($data);
 
             // --- BẮT ĐẦU ĐOẠN XỬ LÝ DỊCH VỤ ---
-            if (isset($data['services'])) {
-                $submittedTypes = collect($data['services'])->pluck('service_type')->toArray();
+            $servicesInput = $request->input('services');
+
+            // Bắt trường hợp người dùng xóa hết toàn bộ dịch vụ (gửi cờ empty_services)
+            if ($request->input('empty_services') === 'true') {
+                $property->servicePrices()->delete();
+            }
+            // Nếu có danh sách dịch vụ truyền lên
+            elseif (is_array($servicesInput) && count($servicesInput) > 0) {
+                $submittedTypes = collect($servicesInput)->pluck('service_type')->toArray();
 
                 // 1. Xóa các dịch vụ mà user đã bấm nút "Thùng rác" (bỏ tick)
                 $property->servicePrices()->whereNotIn('service_type', $submittedTypes)->delete();
 
                 // 2. Thêm mới hoặc Cập nhật giá các dịch vụ còn lại
-                foreach ($data['services'] as $svc) {
+                foreach ($servicesInput as $svc) {
                     $property->servicePrices()->updateOrCreate(
                         ['service_type' => $svc['service_type']], // Tìm theo loại dịch vụ
                         [
                             'unit_price'     => $svc['unit_price'],
                             'free_units'     => $svc['free_units'] ?? 0,
-                            'free_unit_type' => $svc['free_unit_type'] ?? null,
-                            'effective_date' => now()->toDateString(),
+                            'free_unit_type' => $svc['free_unit_type'] ?? 'none',
+                            // Khi update không nên ghi đè effective_date liên tục để bảo toàn tính lịch sử
                         ]
                     );
                 }
