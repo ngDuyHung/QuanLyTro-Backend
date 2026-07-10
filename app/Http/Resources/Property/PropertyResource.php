@@ -80,6 +80,12 @@ class PropertyResource extends JsonResource
 
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
+
+            'tax_code' => $this->tax_code,
+            'representative_name' => $this->representative_name,
+
+            // Trạng thái giúp FE render badge nhanh gọn
+            'is_ledger_configured' => !empty($this->tax_code) && !empty($this->representative_name),
         ];
     }
 }

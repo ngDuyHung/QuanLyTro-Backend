@@ -387,128 +387,85 @@ class InvoiceService
         $lease = Lease::with(['room.property', 'tenant', 'serviceItems', 'members'])
             ->whereHas('room.property', fn($q) => $q->where('user_id', $userId))
             ->findOrFail($leaseId);
-        //dd($lease->occupants_count); // dòng nay để debug xem số lượng người ở ghép, dùng cho free_units per_person
 
-        $items = [];
         $propertyId = $lease->room->property_id;
-
-        // 1. Tiền phòng cố định
-        $items[] = [
-            'charge_type' => 'room',
-            'description' => 'Tiền phòng',
-            'unit' => 'Tháng',
-            'quantity' => 1,
-            'unit_price_snapshot' => $lease->room_price, // Thay vì $lease->room->current_price
-            'amount' => $lease->room_price,
-            'is_utility' => false,
-        ];
-
-        // Lấy toàn bộ cấu hình giá dịch vụ của khu trọ
         $applicablePrices = ServicePrice::getApplicablePrices((int)$propertyId);
 
-        // Lấy các chỉ số điện/nước chưa lên hóa đơn của kỳ này (nếu đã ghi nhận trước đó)
+        // 1. Lấy các chỉ số đã chốt (BAO GỒM CẢ ẢNH)
         $unbilledReadings = MeterReading::where('lease_id', $leaseId)
             ->whereNull('invoice_id')
             ->where('reading_date', '<=', $periodTo)
             ->get()
             ->keyBy('type');
 
-        // 2. CHỈ LẤY CÁC DỊCH VỤ CÓ HIỆU LỰC TẠI KỲ HÓA ĐƠN NÀY ($periodTo)
+        // Hàm helper nhỏ để xử lý Điện/Nước nội bộ trong hàm này
+        $processUtility = function (string $type) use ($lease, $applicablePrices, $unbilledReadings, $leaseId) {
+            // Lấy cấu hình dịch vụ trong hợp đồng
+            $serviceItem = $lease->serviceItems->firstWhere('service_type.value', $type)
+                ?? $lease->serviceItems->firstWhere('service_type', $type);
+
+            // Lấy giá và số lượng miễn phí (giống logic cũ của bạn)
+            $priceRule = $applicablePrices->firstWhere('service_type.value', $type)
+                ?? $applicablePrices->firstWhere('service_type', $type);
+
+            $unitPrice = $serviceItem?->custom_price ?? ($priceRule ? $priceRule->unit_price : 0);
+
+            $freeUnits = 0;
+            if ($priceRule && $priceRule->free_units > 0 && $priceRule->free_unit_type->value !== 'none') {
+                $memberCount = $priceRule->free_unit_type->value === 'per_person' ? (int) ($lease->occupants_count ?? 1) : 1;
+                $freeUnits = $priceRule->free_units * $memberCount;
+            }
+
+            // Xử lý số liệu và ảnh
+            $isChotRoi = $unbilledReadings->has($type);
+            if ($isChotRoi) {
+                $reading = $unbilledReadings->get($type);
+                $prev = $reading->previous_reading;
+                $current = $reading->current_reading;
+                // Tạo URL ảnh đầy đủ (Tùy cấu hình storage của bạn)
+                $imageUrl = $reading->meter_image ? asset('storage/' . $reading->meter_image) : null;
+            } else {
+                $lastReading = MeterReading::where('lease_id', $leaseId)->where('type', $type)->orderByDesc('id')->first();
+                $prev = $lastReading ? $lastReading->current_reading : 0;
+                $current = "";
+                $imageUrl = null;
+            }
+
+            return [
+                'prev' => $prev,
+                'current' => $current,
+                'price' => $unitPrice,
+                'free' => $freeUnits,
+                'is_chot_roi' => $isChotRoi,
+                'preview' => $imageUrl, // Trả URL ảnh thẳng vào biến preview để React dùng luôn
+                'image' => null // File gốc (null vì đây là data từ server)
+            ];
+        };
+
+        // 2. Xử lý các dịch vụ ĐỘNG (Dynamic Items)
+        $dynamicItems = [];
         $activeServiceItems = $lease->serviceItems->filter(function ($item) use ($periodTo) {
             $effective = $item->effective_date ? \Carbon\Carbon::parse($item->effective_date)->toDateString() : '2000-01-01';
             $expiry = $item->expiry_date ? \Carbon\Carbon::parse($item->expiry_date)->toDateString() : null;
+            $type = $item->service_type instanceof \BackedEnum ? $item->service_type->value : $item->service_type;
 
-            return $effective <= $periodTo && ($expiry === null || $expiry >= $periodTo);
+            // Loại bỏ điện nước ra khỏi mảng dynamic
+            return $effective <= $periodTo && ($expiry === null || $expiry >= $periodTo) && !in_array($type, ['electricity', 'water']);
         });
 
-        // Loop qua danh sách đã lọc thay vì toàn bộ $lease->serviceItems
-        foreach ($activeServiceItems as $serviceItem) {
-            $type = $serviceItem->service_type instanceof \BackedEnum
-                ? $serviceItem->service_type->value
-                : $serviceItem->service_type;
+        foreach ($activeServiceItems as $index => $serviceItem) {
+            $type = $serviceItem->service_type instanceof \BackedEnum ? $serviceItem->service_type->value : $serviceItem->service_type;
+            $priceRule = $applicablePrices->firstWhere('service_type.value', $type) ?? $applicablePrices->firstWhere('service_type', $type);
 
-            $priceRule = $applicablePrices->first(function ($price) use ($type) {
-                $priceType = $price->service_type instanceof \BackedEnum
-                    ? $price->service_type->value
-                    : $price->service_type;
-                return $priceType === $type;
-            });
-
-            // 3. Xác định đơn giá dịch vụ
-            $unitPrice = $serviceItem->custom_price ?? ($priceRule ? $priceRule->unit_price : 0);
-            $quantity = $serviceItem->quantity;
-            $freeUnits = 0;
-
-            // 4. Tính toán số lượng miễn phí từ bảng service_prices
-            if ($priceRule && $priceRule->free_units > 0) {
-                // Lấy ra chuỗi value thực sự của Enum để so sánh
-                $freeUnitTypeValue = $priceRule->free_unit_type instanceof \BackedEnum
-                    ? $priceRule->free_unit_type->value
-                    : $priceRule->free_unit_type;
-
-                if ($freeUnitTypeValue !== 'none') {
-                    $memberCount = $freeUnitTypeValue === 'per_person'
-                        ? (int) ($lease->occupants_count ?? 1)
-                        : 1;
-
-                    $freeUnits = $priceRule->free_units * $memberCount;
-                }
-            }
-
-            // Các biến bổ sung để phục vụ điện nước có cấu trúc
-            $previousReading = null;
-            $currentReading = null;
-            $isChotRoi = false;
-            $isUtility = in_array($type, ['electricity', 'water']);
-
-            if ($isUtility) {
-                // TRƯỜNG HỢP LÀ ĐIỆN / NƯỚC
-                if ($unbilledReadings->has($type)) {
-                    $reading = $unbilledReadings->get($type);
-                    $previousReading = $reading->previous_reading;
-                    $currentReading = $reading->current_reading;
-                    $quantity = max(0, $currentReading - $previousReading);
-                    $isChotRoi = true;
-                } else {
-                    $lastReading = MeterReading::where('lease_id', $leaseId)
-                        ->where('type', $type)
-                        ->orderByDesc('reading_date')
-                        ->orderByDesc('id')
-                        ->first();
-
-                    $previousReading = $lastReading ? $lastReading->current_reading : 0;
-                    $currentReading = '';
-                    $quantity = 0;
-                    $isChotRoi = false;
-                }
-
-                // Tiền điện/nước = (Số dùng - Số miễn phí) * Đơn giá
-                $billableQuantity = max(0, $quantity - $freeUnits);
-                $amount = $unitPrice * $billableQuantity;
-            } else {
-                // TRƯỜNG HỢP CÁC DỊCH VỤ KHÁC (Rác, mạng, xe...)
-                $billableQuantity = max(0, $quantity - $freeUnits);
-                $amount = $unitPrice * $billableQuantity;
-            }
-
-            // Đẩy vào danh sách gợi ý duy nhất 1 dòng cho mỗi loại phí
-            $items[] = [
-                'service_price_id' => $priceRule ? $priceRule->id : null,
+            $dynamicItems[] = [
+                'id' => time() + $index, // Gỉa lập ID cho React map
                 'charge_type' => $type,
                 'description' => 'Tiền ' . mb_strtolower($serviceItem->service_type->label()),
-                'unit' => $type === 'electricity' ? 'kWh' : ($type === 'water' ? 'm³' : 'Tháng/Lần'),
-                'free_quantity_snapshot' => $freeUnits, // <--- Backend gửi kèm thông số miễn phí để Frontend biết
-                'quantity' => $quantity, // Vẫn gửi số lượng tổng thực tế
-                'unit_price_snapshot' => $unitPrice,
-                'amount' => $amount, // Số tiền sau khi đã trừ miễn phí
-
-                'is_utility' => $isUtility,
-                'previous_reading' => $previousReading,
-                'current_reading' => $currentReading,
-                'is_chot_roi' => $isChotRoi,
+                'unit' => 'Tháng/Lần',
+                'quantity' => $serviceItem->quantity,
+                'unit_price_snapshot' => $serviceItem->custom_price ?? ($priceRule ? $priceRule->unit_price : 0),
             ];
         }
-
 
         // LOGIC TỰ ĐỘNG THÊM TIỀN THẾ CHÂN (CHO HÓA ĐƠN ĐẦU TIÊN)
         // 1. Kiểm tra xem hợp đồng này đã có hóa đơn nào chưa (bỏ qua hóa đơn đã hủy)
@@ -537,16 +494,13 @@ class InvoiceService
                     ? "Tiền thế chân thu bổ sung (Đã trừ cọc: {$formattedResDeposit}đ)"
                     : "Tiền thế chân (Thu 1 lần duy nhất)";
 
-                $items[] = [
+                $dynamicItems[] = [
+                    'id' => time() + 999,
                     'charge_type'            => 'deposit',
                     'description'            => $description,
                     'unit'                   => 'Khoản', // Đổi từ "Lần" sang "Khoản" nghe trang trọng hơn
                     'quantity'               => 1,
                     'unit_price_snapshot'    => $remainingDeposit,
-                    'free_quantity_snapshot' => 0,
-                    'amount'                 => $remainingDeposit,
-                    'is_utility'             => false,
-                    'is_chot_roi'            => false
                 ];
             }
         }
@@ -555,8 +509,13 @@ class InvoiceService
             'lease_id' => $lease->id,
             'room_name' => $lease->room->name,
             'tenant_name' => $lease->tenant->full_name,
-            'previous_debt_amount' => 0,
-            'suggested_items' => $items,
+
+            'room' => [
+                'price' => $lease->room_price
+            ],
+            'electricity' => $processUtility('electricity'),
+            'water' => $processUtility('water'),
+            'dynamic_items' => $dynamicItems,
         ];
     }
 

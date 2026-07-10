@@ -186,6 +186,18 @@ class UpdatePropertyRequest extends FormRequest
                 : null;
         }
 
+        if ($this->has('tax_code')) {
+            $data['tax_code'] = $this->tax_code
+                ? trim((string) $this->tax_code)
+                : null;
+        }
+
+        if ($this->has('representative_name')) {
+            $data['representative_name'] = $this->representative_name
+                ? trim((string) $this->representative_name)
+                : null;
+        }
+
         if ($this->has('description')) {
             $data['description'] = $this->description
                 ? trim((string) $this->description)

@@ -205,9 +205,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
     // ── Accounting Ledger (Chốt sổ kế toán) ────────────────────────────────────
     Route::apiResource('accounting-ledgers', AccountingLedgerController::class)->except(['update']);
     Route::post('accounting-ledgers/preview', [AccountingLedgerController::class, 'preview']);
+    Route::get('/accounting-ledgers/{id}/preview-html', [AccountingLedgerController::class, 'previewHtml']);
     // Route cho Mẫu sổ kế toán S1a-HKD
-    // Route::get('/ledgers/ledger-template', [SettingController::class, 'getLedgerTemplate']);
-    // Route::post('/ledgers/ledger-template', [SettingController::class, 'saveLedgerTemplate']);
     Route::get('/ledgers/{id}/export-pdf', [SettingController::class, 'exportLedgerPdf']);
 });
 

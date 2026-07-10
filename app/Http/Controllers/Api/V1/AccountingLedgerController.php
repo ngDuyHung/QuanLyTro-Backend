@@ -11,6 +11,7 @@ use App\Http\Requests\Accounting\ShowAccountingLedgerRequest;
 use App\Http\Resources\Accounting\AccountingLedgerResource;
 use App\Models\AccountingLedger;
 use App\Services\AccountingLedgerService;
+use App\Services\SettingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -85,7 +86,7 @@ class AccountingLedgerController extends Controller
     {
         // Vì request đã check ownership (tồn tại và thuộc về user) rồi, nên chỉ cần query lấy data
         $ledger = AccountingLedger::query()
-            ->with(['property:id,name', 'details' => function($q) {
+            ->with(['property:id,name', 'details' => function ($q) {
                 $q->orderBy('transaction_date', 'asc');
             }])
             ->find($id);
@@ -100,11 +101,23 @@ class AccountingLedgerController extends Controller
     {
         // Đã check ownership ở Request
         $ledger = AccountingLedger::find($id);
-        
+
         $ledger->delete();
 
         return response()->json([
             'message' => 'Đã hủy sổ kế toán thành công.'
+        ]);
+    }
+
+    public function previewHtml(ShowAccountingLedgerRequest $request, int $id, SettingService $settingService): JsonResponse
+    {
+        // Gọi qua SettingService để lấy HTML
+        $html = $settingService->compileLedgerHtml($id, $request->user()->id);
+
+        return response()->json([
+            'data' => [
+                'html' => $html
+            ]
         ]);
     }
 }

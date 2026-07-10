@@ -178,6 +178,7 @@ class PropertyController extends Controller
                             'unit_price'     => $svc['unit_price'],
                             'free_units'     => $svc['free_units'] ?? 0,
                             'free_unit_type' => $svc['free_unit_type'] ?? 'none',
+                            'effective_date' => now()->toDateString(), // Khi update không nên ghi đè effective_date liên tục để bảo toàn tính lịch s
                             // Khi update không nên ghi đè effective_date liên tục để bảo toàn tính lịch sử
                         ]
                     );

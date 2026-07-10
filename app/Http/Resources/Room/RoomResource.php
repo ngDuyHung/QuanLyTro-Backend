@@ -26,7 +26,7 @@ class RoomResource extends JsonResource
             'max_occupants' => $this->max_occupants,
 
             'current_price' => $this->current_price,
-            
+
             'deposit_amount' => $this->deposit_amount,
 
             'billing_day' => $this->billing_day,
@@ -151,14 +151,41 @@ class RoomResource extends JsonResource
                     'note' => $reservation->note,
                 ];
             }),
-            // có hóa đơn chưa thanh toán hay không
-            'has_unpaid_invoice' => $this->whenLoaded('invoices', function () {
-                return $this->invoices->isNotEmpty();
-            }),
-
-            // tổng số tiền còn nợ (chưa thanh toán) của các hóa đơn
             'unpaid_amount' => $this->whenLoaded('invoices', function () {
-                return $this->invoices->sum('remaining_amount');
+                return $this->invoices->sum('remaining_amount'); //[cite: 1]
+            }, 0),
+
+            'payment_status' => $this->whenLoaded('invoices', function () {
+                // Chỉ xét trạng thái thanh toán cho phòng đang có người thuê
+                if ($this->status?->value !== 'occupied') {
+                    return null;
+                }
+
+                // 1. Kiểm tra phòng có đang nợ tiền không
+                $unpaidAmount = $this->invoices->sum('remaining_amount');
+                if ($unpaidAmount > 0) {
+                    return 'debt'; // Trạng thái: Đang nợ
+                }
+
+                // 2. Kiểm tra xem đã lập hóa đơn cho kỳ (tháng) hiện tại chưa
+                if ($this->relationLoaded('latestInvoice')) {
+                    $latest = $this->latestInvoice;
+
+                    // Lấy định dạng Năm-Tháng hiện tại (VD: "2024-05")
+                    $currentMonth = now()->format('Y-m');
+
+                    // Kiểm tra hóa đơn mới nhất có kỳ bắt đầu (period_from) thuộc tháng này không
+                    if (
+                        !$latest ||
+                        !$latest->period_from ||
+                        $latest->period_from->format('Y-m') !== $currentMonth
+                    ) {
+                        return 'unbilled'; // Trạng thái: Chưa lập hóa đơn tháng này
+                    }
+                }
+
+                // 3. Nếu không nợ và kỳ này ĐÃ có hóa đơn
+                return 'paid'; // Trạng thái: Đã thu đủ
             }),
         ];
     }

@@ -31,7 +31,7 @@ class Room extends Model
         'is_public', // Có đăng phòng lên trang công khai hay không
         'status',
         'description',
-        
+
     ];
 
     protected $casts = [
@@ -148,5 +148,13 @@ class Room extends Model
     public function reservations(): HasMany
     {
         return $this->hasMany(RoomReservation::class);
+    }
+
+    /**
+     * Lấy hóa đơn mới nhất của phòng.
+     */
+    public function latestInvoice(): HasOne
+    {
+        return $this->hasOne(Invoice::class)->latestOfMany();
     }
 }

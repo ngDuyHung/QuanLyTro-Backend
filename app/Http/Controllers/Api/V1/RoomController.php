@@ -47,7 +47,10 @@ class RoomController extends Controller
                 ->orderBy('id'),
             'reservations' => fn($query) => $query
                 ->where('status', 'pending'),
-            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+            // Lấy các hóa đơn đang nợ để tính tổng tiền[cite: 2]
+            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue']),
+            // THÊM DÒNG NÀY: Lấy hóa đơn mới nhất để check xem tháng này đã lập chưa
+            'latestInvoice' // funct trong model
         ])
             ->where('property_id', $property->id)
             ->when(
@@ -76,7 +79,8 @@ class RoomController extends Controller
                 ->orderByRaw("role = 'representative' desc")
                 ->orderBy('id'),
             'reservations' => fn($query) => $query->where('status', 'pending'),
-            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue']),
+            'latestInvoice'
         ])
             ->whereHas(
                 'property',
@@ -139,7 +143,8 @@ class RoomController extends Controller
                 ->orderByRaw("role = 'representative' desc")
                 ->orderBy('id'),
             'reservations' => fn($query) => $query->where('status', 'pending'),
-            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue']),
+            'latestInvoice'
         ])
             ->whereHas('property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
@@ -412,7 +417,7 @@ class RoomController extends Controller
             'available_rate' => $percent($available),
             'maintenance_rate' => $percent($maintenance),
             'reserved_rate' => $percent($reserved),
-            
+
             // Chưa có module công nợ/hóa đơn thì tạm để 0.
             'debt_rooms' => 0,
             'debt_rate' => 0,

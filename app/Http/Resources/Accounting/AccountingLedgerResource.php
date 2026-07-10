@@ -14,8 +14,11 @@ class AccountingLedgerResource extends JsonResource
         return [
             'id' => $this->id,
             'property_id' => $this->property_id,
-            // Nếu có eager load property thì lấy tên, không thì báo "Toàn hệ thống"
-            'property_name' => $this->whenLoaded('property', fn() => $this->property->name, 'Toàn hệ thống'),
+            
+            'property_name' => $this->whenLoaded('property', fn() => $this->property->name, 'Toàn bộ hệ thống'),
+            'property_address' => $this->whenLoaded('property', fn() => $this->property->address, '..........................................................'),
+            'tax_code' => $this->whenLoaded('property', fn() => $this->property->tax_code, '............................................'),
+            'representative_name' => $this->whenLoaded('property', fn() => $this->property->representative_name, ''),
 
             'period_type' => $this->period_type,
             'period_year' => $this->period_year,
