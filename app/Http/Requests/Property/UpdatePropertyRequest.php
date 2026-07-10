@@ -42,6 +42,8 @@ class UpdatePropertyRequest extends FormRequest
             'expected_rooms_count' => ['sometimes', 'required', 'integer', 'min:0', 'max:1000'],
 
             'manager_name' => ['nullable', 'string', 'max:100'],
+            'tax_code' => ['nullable', 'string', 'max:50'],
+            'representative_name' => ['nullable', 'string', 'max:100'],
 
             'address' => ['sometimes', 'required', 'string', 'max:255'],
 
@@ -53,7 +55,7 @@ class UpdatePropertyRequest extends FormRequest
 
             'description' => ['nullable', 'string', 'max:1000'],
 
-            
+
             'services.*.service_type.required' => 'Loại dịch vụ không được để trống.',
             'services.*.service_type.enum' => 'Loại dịch vụ không hợp lệ.',
             'services.*.unit_price.required' => 'Đơn giá dịch vụ không được để trống.',
@@ -92,6 +94,8 @@ class UpdatePropertyRequest extends FormRequest
             'expected_rooms_count.max' => 'Số phòng dự kiến không vượt quá 1000.',
 
             'manager_name.max' => 'Tên người quản lý không vượt quá 100 ký tự.',
+            'tax_code.max' => 'Mã số thuế không vượt quá 50 ký tự.',
+            'representative_name.max' => 'Tên người đại diện không vượt quá 100 ký tự.',
 
             'address.required' => 'Địa chỉ không được để trống.',
             'address.max' => 'Địa chỉ không vượt quá 255 ký tự.',
@@ -128,6 +132,8 @@ class UpdatePropertyRequest extends FormRequest
             'floors_count' => 'số tầng',
             'expected_rooms_count' => 'số phòng dự kiến',
             'manager_name' => 'người quản lý',
+            'tax_code' => 'mã số thuế',
+            'representative_name' => 'người đại diện',
             'address' => 'địa chỉ',
             'latitude' => 'vĩ độ',
             'longitude' => 'kinh độ',

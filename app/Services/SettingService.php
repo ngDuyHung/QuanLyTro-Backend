@@ -112,7 +112,9 @@ class SettingService
         return str_replace(array_keys($replacePairs), array_values($replacePairs), $html);
     }
 
-    // Sửa lại hàm generateLeasePdf hiện tại để tái sử dụng mã
+    /**
+     * Biên dịch HTML và tạo object PDF cho hợp đồng
+     */
     public function generateLeasePdf(int $leaseId, int $userId)
     {
         $compiledHtml = $this->compileLeaseHtml($leaseId, $userId);
@@ -314,5 +316,191 @@ class SettingService
 
         // Trả về HTML đã thay thế dữ liệu thật
         return str_replace(array_keys($replacePairs), array_values($replacePairs), $html);
+    }
+
+    // /**
+    //  * Lấy mẫu HTML của Sổ kế toán
+    //  */
+    // public function getLedgerTemplate(int $userId): string
+    // {
+    //     $setting = Setting::where('key', 'ledger_template')
+    //         ->where(function ($query) use ($userId) {
+    //             $query->where('user_id', $userId)
+    //                 ->orWhereNull('user_id');
+    //         })
+    //         ->orderBy('user_id', 'desc')
+    //         ->first();
+
+    //     return $setting ? $setting->value : '';
+    // }
+
+    // /**
+    //  * Lưu mẫu HTML Sổ kế toán do chủ trọ chỉnh sửa
+    //  */
+    // public function saveLedgerTemplate(int $userId, string $template): Setting
+    // {
+    //     return Setting::updateOrCreate(
+    //         ['user_id' => $userId, 'key' => 'ledger_template'],
+    //         ['value' => $template]
+    //     );
+    // }
+
+    // /**
+    //  * Biên dịch HTML và sinh PDF Sổ kế toán Mẫu S1a-HKD
+    //  */
+    // public function generateLedgerPdf(int $ledgerId, int $userId)
+    // {
+    //     $ledger = \App\Models\AccountingLedger::with(['details', 'property'])
+    //         ->where('user_id', $userId)
+    //         ->findOrFail($ledgerId);
+
+    //     $template = $this->getLedgerTemplate($userId);
+
+    //     // 1. Build cấu trúc HTML cho từng dòng chi tiết (chỉ 3 cột: Ngày, Diễn giải, Tiền)
+    //     $rowsHtml = '';
+    //     foreach ($ledger->details as $detail) {
+    //         $date = $detail->transaction_date ? \Carbon\Carbon::parse($detail->transaction_date)->format('d/m/Y') : '';
+    //         $amount = number_format((float) $detail->amount, 0, ',', '.');
+
+    //         $rowsHtml .= "<tr>
+    //             <td align='center'>{$date}</td>
+    //             <td>{$detail->description}</td>
+    //             <td align='right'>{$amount}</td>
+    //         </tr>";
+    //     }
+
+    //     // 2. Xác định kỳ hiển thị
+    //     $periodLabel = match ($ledger->period_type) {
+    //         'month' => "Tháng {$ledger->period_month} năm {$ledger->period_year}",
+    //         'quarter' => "Quý ... năm {$ledger->period_year}",
+    //         'year' => "Năm {$ledger->period_year}",
+    //         default => "Năm {$ledger->period_year}",
+    //     };
+
+    //     // 3. Thay thế biến
+    //     $replacements = [
+    //         '{{PROPERTY_NAME}}' => $ledger->property ? $ledger->property->name : 'Toàn bộ hệ thống',
+    //         '{{PROPERTY_ADDRESS}}' => $ledger->property ? $ledger->property->address : '..........................................................',
+
+    //         '{{PERIOD_LABEL}}' => $periodLabel,
+
+    //         '{{TOTAL_REVENUE}}' => number_format((float) $ledger->total_revenue, 0, ',', '.'),
+    //         '{{LEDGER_ROWS_HTML}}' => $rowsHtml,
+
+    //         '{{CURRENT_DAY}}' => date('d'),
+    //         '{{CURRENT_MONTH}}' => date('m'),
+    //         '{{CURRENT_YEAR}}' => date('Y'),
+    //     ];
+
+    //     $html = str_replace(array_keys($replacements), array_values($replacements), $template);
+
+    //     return Pdf::loadHTML($html)->setPaper('A4', 'portrait');
+    // }
+
+
+    /**
+     * Biên dịch HTML và sinh PDF Sổ kế toán Mẫu S1a-HKD (Hardcode chuẩn Bộ Tài chính)
+     */
+    public function generateLedgerPdf(int $ledgerId, int $userId)
+    {
+        $ledger = \App\Models\AccountingLedger::with(['details', 'property'])
+            ->where('user_id', $userId)
+            ->findOrFail($ledgerId);
+
+        // 1. Build cấu trúc HTML cho từng dòng chi tiết
+        $rowsHtml = '';
+        foreach ($ledger->details as $detail) {
+            $date = $detail->transaction_date ? \Carbon\Carbon::parse($detail->transaction_date)->format('d/m/Y') : '';
+            $amount = number_format((float) $detail->amount, 0, ',', '.');
+
+            $rowsHtml .= "<tr>
+                <td align='center'>{$date}</td>
+                <td>{$detail->description}</td>
+                <td align='right'>{$amount}</td>
+            </tr>";
+        }
+
+        $periodLabel = match ($ledger->period_type) {
+            'month' => "Tháng {$ledger->period_month} năm {$ledger->period_year}",
+            'quarter' => "Quý ... năm {$ledger->period_year}",
+            'year' => "Năm {$ledger->period_year}",
+            default => "Năm {$ledger->period_year}",
+        };
+
+        // 2. Lấy thông tin pháp lý từ Property (Nếu chọn 'Toàn bộ hệ thống' thì để chấm chấm)
+        $propertyName = $ledger->property ? $ledger->property->name : 'Toàn bộ hệ thống';
+        $propertyAddress = $ledger->property ? $ledger->property->address : '..........................................................';
+        $taxCode = ($ledger->property && $ledger->property->tax_code) ? $ledger->property->tax_code : '............................................';
+        $repName = ($ledger->property && $ledger->property->representative_name) ? $ledger->property->representative_name : '..........................................................';
+
+        // 3. MẪU HTML CỐ ĐỊNH CHUẨN S1a-HKD
+        $html = <<<HTML
+        <div style="font-family: 'DejaVu Sans', sans-serif; font-size: 13px; line-height: 1.5; color: #000; padding: 20px;">
+            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
+                <tr>
+                    <td width="60%" valign="top">
+                        <strong style="font-size: 14px; text-transform: uppercase;">HỘ, CÁ NHÂN KINH DOANH: {$propertyName}</strong><br>
+                        Địa chỉ: {$propertyAddress}<br>
+                        Mã số thuế: {$taxCode}
+                    </td>
+                    <td width="40%" align="center" valign="top">
+                        <strong style="font-size: 14px;">Mẫu số S1a-HKD</strong><br>
+                        <i style="font-size: 11px;">(Kèm theo Thông tư số 152/2025/TT-BTC<br> ngày 31 tháng 12 năm 2025 của Bộ trưởng<br>Bộ Tài chính)</i>
+                    </td>
+                </tr>
+            </table>
+
+            <h2 style="text-align: center; font-weight: bold; margin-top: 10px; margin-bottom: 5px; font-size: 16px;">SỔ DOANH THU BÁN HÀNG HÓA, DỊCH VỤ</h2>
+            <p style="text-align: center; font-style: italic; margin-bottom: 5px;">Địa điểm kinh doanh: {$propertyAddress}</p>
+            <p style="text-align: center; font-style: italic; margin-bottom: 20px;">Kỳ kê khai: {$periodLabel}</p>
+
+            <p style="text-align: right; font-style: italic; margin-bottom: 5px;">Đơn vị tính: VNĐ</p>
+
+            <table width="100%" border="1" cellspacing="0" cellpadding="8" style="border-collapse: collapse; font-size: 13px; margin-bottom: 20px;">
+                <thead>
+                    <tr style="background-color: #f2f2f2; font-weight: bold; text-align: center;">
+                        <th width="15%">Ngày tháng</th>
+                        <th width="65%">Diễn giải</th>
+                        <th width="20%">Số tiền</th>
+                    </tr>
+                    <tr style="text-align: center; font-weight: bold; background-color: #fafafa;">
+                        <td>A</td>
+                        <td>B</td>
+                        <td>1</td>
+                    </tr>
+                </thead>
+                <tbody>
+                    {$rowsHtml}
+                </tbody>
+                <tfoot>
+                    <tr style="font-weight: bold; background-color: #f9f9f9;">
+                        <td colspan="2" align="center">Tổng cộng</td>
+                        <td align="right">
+        HTML;
+
+        $html .= number_format((float) $ledger->total_revenue, 0, ',', '.') . <<<HTML
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top: 30px;">
+                <tr>
+                    <td width="50%" align="center"></td>
+                    <td width="50%" align="center">
+                        <i style="font-size: 13px;">Ngày 
+        HTML;
+        $html .= date('d') . ' tháng ' . date('m') . ' năm ' . date('Y') . <<<HTML
+                        </i><br>
+                        <strong style="font-size: 14px;">NGƯỜI ĐẠI DIỆN HỘ KINH DOANH/<br>CÁ NHÂN KINH DOANH</strong><br>
+                        <i style="font-size: 12px;">(Ký, ghi rõ họ tên, đóng dấu (nếu có))</i><br><br><br><br><br><br>
+                        <strong>{$repName}</strong>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        HTML;
+
+        return \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('A4', 'portrait');
     }
 }

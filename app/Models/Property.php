@@ -25,6 +25,8 @@ class Property extends Model
         'floors_count', // Số tầng của khu nhà, 0 nếu không phân tầng
         'expected_rooms_count',
         'manager_name',
+        'tax_code',
+        'representative_name',
         'address',
         'latitude', // Vĩ độ Google Map
         'longitude', // Kinh độ Google Map

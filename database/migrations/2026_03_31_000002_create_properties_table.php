@@ -48,6 +48,14 @@ return new class extends Migration
                 ->nullable()
                 ->comment('Người quản lý hoặc người liên hệ chính');
 
+            $table->string('tax_code', 50)
+                ->nullable()
+                ->comment('Mã số thuế Hộ kinh doanh');
+
+            $table->string('representative_name', 100)
+                ->nullable()
+                ->comment('Người đại diện pháp luật (Chủ hộ kinh doanh)');
+
             $table->string('address', 255)
                 ->comment('Địa chỉ chi tiết khu nhà');
 

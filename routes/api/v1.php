@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\V1\AccountingLedgerController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BankAccountController;
 use App\Http\Controllers\Api\V1\LeaseController;
@@ -15,6 +16,7 @@ use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\FinancialTransactionController;
 use App\Http\Controllers\Api\V1\ImportController;
 use App\Http\Controllers\Api\V1\InvoiceController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OcrController;
 use App\Http\Controllers\Api\V1\RoomReservationController;
 use App\Http\Controllers\Api\V1\SepayConfigController;
@@ -198,7 +200,15 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('imports/master-data/template', [ImportController::class, 'downloadTemplate']);
 
     // ── Route Notifications (Thông báo) ─────────────────────────────────────────────
-    Route::apiResource('notifications', \App\Http\Controllers\Api\V1\NotificationController::class);
+    Route::apiResource('notifications', NotificationController::class);
+
+    // ── Accounting Ledger (Chốt sổ kế toán) ────────────────────────────────────
+    Route::apiResource('accounting-ledgers', AccountingLedgerController::class)->except(['update']);
+    Route::post('accounting-ledgers/preview', [AccountingLedgerController::class, 'preview']);
+    // Route cho Mẫu sổ kế toán S1a-HKD
+    // Route::get('/ledgers/ledger-template', [SettingController::class, 'getLedgerTemplate']);
+    // Route::post('/ledgers/ledger-template', [SettingController::class, 'saveLedgerTemplate']);
+    Route::get('/ledgers/{id}/export-pdf', [SettingController::class, 'exportLedgerPdf']);
 });
 
 // 1. THÊM ROUTE WEBHOOK VÀO PHẦN PUBLIC (Nằm ngoài auth:sanctum)

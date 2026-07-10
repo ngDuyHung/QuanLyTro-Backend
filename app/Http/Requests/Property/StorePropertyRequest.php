@@ -38,6 +38,8 @@ class StorePropertyRequest extends FormRequest
             'expected_rooms_count' => ['required', 'integer', 'min:0', 'max:1000'],
 
             'manager_name' => ['nullable', 'string', 'max:100'],
+            'tax_code' => ['nullable', 'string', 'max:50'],
+            'representative_name' => ['nullable', 'string', 'max:100'],
 
             'address' => ['required', 'string', 'max:255'],
 
@@ -82,6 +84,8 @@ class StorePropertyRequest extends FormRequest
             'expected_rooms_count.min' => 'Số phòng dự kiến không được nhỏ hơn 0.',
 
             'manager_name.max' => 'Tên người quản lý không vượt quá 100 ký tự.',
+            'tax_code.max' => 'Mã số thuế không vượt quá 50 ký tự.',
+            'representative_name.max' => 'Tên người đại diện không vượt quá 100 ký tự.',
 
             'address.required' => 'Địa chỉ không được để trống.',
             'address.max' => 'Địa chỉ không vượt quá 255 ký tự.',
@@ -119,6 +123,8 @@ class StorePropertyRequest extends FormRequest
             'floors_count' => 'số tầng',
             'expected_rooms_count' => 'số phòng dự kiến',
             'manager_name' => 'người quản lý',
+            'tax_code' => 'mã số thuế',
+            'representative_name' => 'người đại diện',
             'address' => 'địa chỉ',
             'latitude' => 'vĩ độ',
             'longitude' => 'kinh độ',

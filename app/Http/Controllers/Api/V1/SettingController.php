@@ -6,7 +6,9 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Setting\ExportLeasePdfRequest;
+use App\Http\Requests\Setting\ExportLedgerPdfRequest;
 use App\Http\Requests\Setting\SaveContractTemplateRequest;
+use App\Http\Requests\Setting\SaveLedgerTemplateRequest;
 use App\Http\Resources\Setting\SettingResource;
 use App\Services\SettingService;
 use Illuminate\Http\JsonResponse;
@@ -107,5 +109,44 @@ class SettingController extends Controller
 
         // Trả về file PDF để trình duyệt có thể tải xuống
         return $pdf->download("Hoa_don_{$id}.pdf");
+    }
+
+    // /**
+    //  * Lấy mẫu Sổ kế toán
+    //  */
+    // public function getLedgerTemplate(Request $request): JsonResponse
+    // {
+    //     $template = $this->settingService->getLedgerTemplate($request->user()->id);
+
+    //     return (new SettingResource($template))
+    //         ->additional(['success' => true])
+    //         ->response();
+    // }
+
+    // /**
+    //  * Lưu mẫu Sổ kế toán
+    //  */
+    // public function saveLedgerTemplate(SaveLedgerTemplateRequest $request): JsonResponse
+    // {
+    //     $setting = $this->settingService->saveLedgerTemplate(
+    //         $request->user()->id,
+    //         $request->validated('template')
+    //     );
+
+    //     return (new SettingResource($setting))
+    //         ->additional([
+    //             'success' => true,
+    //             'message' => 'Lưu mẫu sổ kế toán thành công.'
+    //         ])
+    //         ->response();
+    // }
+
+    /**
+     * Xuất PDF Sổ kế toán
+     */
+    public function exportLedgerPdf(ExportLedgerPdfRequest $request, int $id)
+    {
+        $pdf = $this->settingService->generateLedgerPdf($id, $request->user()->id);
+        return $pdf->download("So_Ke_Toan_S1a_HKD_{$id}.pdf");
     }
 }
