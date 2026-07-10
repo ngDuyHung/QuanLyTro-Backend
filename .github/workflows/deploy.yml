@@ -31,7 +31,9 @@ jobs:
           "phpunit.xml" "README.md" ".editorconfig"
 
       # 5. Upload package via SCP
-      - name: Upload package to hosting
+      - name: Upload package to hosting (attempt 1)
+        id: upload_package
+        continue-on-error: true
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -42,6 +44,24 @@ jobs:
           target: "/home/t1772298550/"
           timeout: 300s            # thời gian chờ kết nối (giây)
           command_timeout: 600s    # thời gian chờ lệnh chạy (giây)
+
+      - name: Upload package to hosting (retry)
+        id: upload_package_retry
+        if: steps.upload_package.outcome == 'failure'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          source: "deploy.zip"
+          target: "/home/t1772298550/"
+          timeout: 300s            # thời gian chờ kết nối (giây)
+          command_timeout: 600s    # thời gian chờ lệnh chạy (giây)
+
+      - name: Ensure package upload succeeded
+        if: steps.upload_package.outcome == 'failure' && steps.upload_package_retry.outcome == 'failure'
+        run: exit 1
 
       # 6. Run post-deploy commands
       - name: Deploy and run artisan commands
