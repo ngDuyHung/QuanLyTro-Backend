@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Enums\ServiceType;
 use App\Exceptions\Domain\BusinessException;
 use App\Models\FinancialTransactionAllocation;
+use App\Models\Incident;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Lease;
@@ -100,6 +101,15 @@ class InvoiceService
                 ->where('reading_date', '<=', $data['period_to'])
                 ->update(['invoice_id' => $invoice->id]);
 
+
+            // Gắn invoice_id cho các sự cố chưa thu tiền của khách
+            \App\Models\Incident::where('room_id', $lease->room_id)
+                ->whereNull('invoice_id')
+                ->where('status', 'resolved')
+                ->where('payer', 'tenant')
+                ->whereDate('resolved_at', '<=', $data['period_to'])
+                ->update(['invoice_id' => $invoice->id]);
+
             return $invoice->fresh(['lease.room.property', 'items']);
         });
     }
@@ -168,6 +178,9 @@ class InvoiceService
 
             // Trả lại trạng thái tự do (null) cho chỉ số để có thể tạo lại hóa đơn khác
             \App\Models\MeterReading::where('invoice_id', $invoice->id)->update(['invoice_id' => null]);
+
+            // BẮT ĐẦU THÊM MỚI: Trả lại trạng thái chưa thu tiền cho sự cố để kỳ sau tính lại
+            \App\Models\Incident::where('invoice_id', $invoice->id)->update(['invoice_id' => null]);
 
             return $invoice->fresh(['lease.room.property', 'items']);
         });
@@ -501,6 +514,28 @@ class InvoiceService
                     'unit'                   => 'Khoản', // Đổi từ "Lần" sang "Khoản" nghe trang trọng hơn
                     'quantity'               => 1,
                     'unit_price_snapshot'    => $remainingDeposit,
+                ];
+            }
+        }
+
+
+        // LOGIC TỰ ĐỘNG THÊM PHÍ SỬA CHỮA (SỰ CỐ KHÁCH THUÊ CHỊU PHÍ)
+        $unbilledIncidents = Incident::where('room_id', $lease->room_id)
+            ->where('status', 'resolved') // Đã giải quyết xong
+            ->where('payer', 'tenant')    // Khách thuê phải trả tiền
+            ->whereNull('invoice_id')     // Chưa cấn vào hóa đơn nào
+            ->whereDate('resolved_at', '<=', $periodTo) // Chốt trước ngày cuối kỳ hóa đơn
+            ->get();
+
+        foreach ($unbilledIncidents as $incident) {
+            if ($incident->repair_cost > 0) {
+                $dynamicItems[] = [
+                    'id' => time() + rand(1000, 9999), // Giả lập ID cho React map
+                    'charge_type'            => 'damage_fee',
+                    'description'            => "Phí sửa chữa sự cố: {$incident->title}",
+                    'unit'                   => 'Lần',
+                    'quantity'               => 1,
+                    'unit_price_snapshot'    => $incident->repair_cost,
                 ];
             }
         }

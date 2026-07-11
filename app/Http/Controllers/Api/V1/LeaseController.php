@@ -175,7 +175,7 @@ class LeaseController extends Controller
             ->whereHas('room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
-        if (!$lease->status->isPending() && !$lease->status->isTerminated()) {
+        if ($lease->status->isActive()) {
             throw new BusinessException('Chỉ có thể xóa hợp đồng đang ở trạng thái chờ hoặc đã kết thúc.');
         }
 

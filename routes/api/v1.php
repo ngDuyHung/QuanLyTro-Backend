@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\V1\AccountingLedgerController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BankAccountController;
+use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\LeaseController;
 use App\Http\Controllers\Api\V1\LeaseMemberController;
 use App\Http\Controllers\Api\V1\MeterReadingController;
@@ -15,6 +16,7 @@ use App\Http\Controllers\Api\V1\ServicePriceController;
 use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\FinancialTransactionController;
 use App\Http\Controllers\Api\V1\ImportController;
+use App\Http\Controllers\Api\V1\IncidentController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OcrController;
@@ -208,6 +210,15 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/accounting-ledgers/{id}/preview-html', [AccountingLedgerController::class, 'previewHtml']);
     // Route cho Mẫu sổ kế toán S1a-HKD
     Route::get('/ledgers/{id}/export-pdf', [SettingController::class, 'exportLedgerPdf']);
+
+    // ── Incidents (Sự cố) ─────────────────────────────────────────────────────
+    Route::apiResource('incidents', IncidentController::class);
+    Route::patch('incidents/{id}/process', [IncidentController::class, 'process']);
+    Route::post('incidents/{id}/resolve', [IncidentController::class, 'resolve']);
+    Route::patch('incidents/{id}/cancel', [IncidentController::class, 'cancel']);
+
+    // ── Dashboard (Thống kê) ───────────────────────────────────────────────
+    Route::get('dashboard', [DashboardController::class, 'index']);
 });
 
 // 1. THÊM ROUTE WEBHOOK VÀO PHẦN PUBLIC (Nằm ngoài auth:sanctum)
