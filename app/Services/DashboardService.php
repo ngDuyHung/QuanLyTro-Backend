@@ -26,6 +26,70 @@ class DashboardService
             'overview' => $this->getOverviewStats($propertyIds),
             'financial_chart' => $this->getFinancialChart($propertyIds),
             'pending_tasks' => $this->getPendingTasks($userId, $propertyIds),
+            'collection_status' => $this->getCollectionStatus($propertyIds),
+            'expiring_leases' => $this->getExpiringLeasesList($propertyIds),
+        ];
+    }
+
+    //  Hàm tính toán tình hình thu tiền tháng
+    private function getCollectionStatus(array $propertyIds): array
+    {
+        if (empty($propertyIds)) {
+            return $this->emptyCollectionStatus();
+        }
+
+        // Lấy từ ngày đầu tháng đến cuối tháng hiện tại
+        $startDate = now()->startOfMonth()->toDateString();
+        $endDate = now()->endOfMonth()->toDateString();
+
+        // Lấy tổng total_amount và paid_amount group theo trạng thái của hóa đơn phát hành tháng này
+        $stats = Invoice::whereHas('lease.room', fn($q) => $q->whereIn('property_id', $propertyIds))
+            ->where('status', '!=', 'draft') // Bỏ qua hóa đơn nháp
+            ->whereBetween('issue_date', [$startDate, $endDate])
+            ->selectRaw("status, SUM(total_amount) as sum_total, SUM(paid_amount) as sum_paid")
+            ->groupBy('status')
+            ->get()
+            ->keyBy('status');
+
+        $paid = (int) ($stats['paid']->sum_total ?? 0);
+        $partially_paid = (int) ($stats['partially_paid']->sum_total ?? 0);
+        $issued = (int) ($stats['issued']->sum_total ?? 0); // Chưa thu
+        $cancelled = (int) ($stats['cancelled']->sum_total ?? 0); // Đã hủy
+
+        // Tổng kỳ vọng thu trong tháng = Tổng giá trị các hóa đơn
+        $totalExpected = $paid + $partially_paid + $issued + $cancelled;
+
+        // Tổng tiền THỰC TẾ đã cầm trong tay của các hóa đơn tháng này
+        $collectedTotal = (int) $stats->sum('sum_paid');
+
+        // Hàm tính phần trăm an toàn
+        $calcPercent = fn($val) => $totalExpected > 0 ? round(($val / $totalExpected) * 100) : 0;
+
+        return [
+            'month_label' => now()->format('m/Y'),
+            'total_expected' => $totalExpected,
+            'collected_total' => $collectedTotal,
+            'statuses' => [
+                'paid' => ['amount' => $paid, 'percent' => $calcPercent($paid)],
+                'partially_paid' => ['amount' => $partially_paid, 'percent' => $calcPercent($partially_paid)],
+                'issued' => ['amount' => $issued, 'percent' => $calcPercent($issued)],
+                'cancelled' => ['amount' => $cancelled, 'percent' => $calcPercent($cancelled)],
+            ]
+        ];
+    }
+
+    private function emptyCollectionStatus(): array
+    {
+        return [
+            'month_label' => now()->format('m/Y'),
+            'total_expected' => 0,
+            'collected_total' => 0,
+            'statuses' => [
+                'paid' => ['amount' => 0, 'percent' => 0],
+                'partially_paid' => ['amount' => 0, 'percent' => 0],
+                'issued' => ['amount' => 0, 'percent' => 0],
+                'cancelled' => ['amount' => 0, 'percent' => 0],
+            ]
         ];
     }
 
@@ -42,6 +106,7 @@ class DashboardService
                 'available_rooms' => 0,
                 'maintenance_rooms' => 0,
                 'occupancy_rate' => 0,
+                'total_leases' => 0,
             ];
         }
 
@@ -60,6 +125,9 @@ class DashboardService
         $totalRooms = array_sum($roomsStat);
 
         $occupancyRate = $totalRooms > 0 ? round(($occupied / $totalRooms) * 100, 1) : 0;
+        $totalLeases = Lease::whereHas('room', fn($q) => $q->whereIn('property_id', $propertyIds))
+            ->where('status', 'active')
+            ->count();
 
         return [
             'total_properties' => $totalProperties,
@@ -68,6 +136,7 @@ class DashboardService
             'available_rooms' => $available,
             'maintenance_rooms' => $maintenance,
             'occupancy_rate' => $occupancyRate,
+            'total_leases' => $totalLeases,
         ];
     }
 
@@ -100,7 +169,7 @@ class DashboardService
 
         // Lấy tổng thu chi group theo tháng và direction
         $transactions = FinancialTransaction::whereIn('property_id', $propertyIds)
-            ->where('status', 'completed')
+            ->where('status', 'confirmed')
             ->whereBetween('transaction_date', [$startDate, $endDate])
             // Dùng DATE_FORMAT của MySQL để cắt lấy năm-tháng
             ->selectRaw("DATE_FORMAT(transaction_date, '%Y-%m') as month_key, direction, SUM(amount) as total")
@@ -134,19 +203,33 @@ class DashboardService
             return [
                 'unpaid_invoices_count' => 0,
                 'unpaid_invoices_total' => 0,
+                'overdue_invoices_count' => 0,
+                'overdue_invoices_total' => 0,
+                'due_soon_invoices_count' => 0,
+                'due_soon_invoices_total' => 0,
                 'pending_incidents_count' => 0,
                 'expiring_leases_count' => 0,
             ];
         }
 
-        // 3.1: Hóa đơn chưa thu (Issued và còn nợ)
-        $unpaidInvoices = Invoice::whereHas('lease.room', fn($q) => $q->whereIn('property_id', $propertyIds))
+        $now = now()->toDateString();
+        $threeDaysLater = now()->addDays(3)->toDateString();
+
+        // 3.1: Hóa đơn chưa thu (Gom nhóm Quá hạn, Sắp đến hạn và Tổng bằng 1 câu Query duy nhất)
+        $invoiceStats = Invoice::whereHas('lease.room', fn($q) => $q->whereIn('property_id', $propertyIds))
             ->where('status', 'issued')
             ->where('remaining_amount', '>', 0)
-            ->selectRaw("COUNT(*) as count, SUM(remaining_amount) as total")
+            ->selectRaw("
+                COUNT(id) as total_count,
+                SUM(remaining_amount) as total_amount,
+                SUM(CASE WHEN due_date < ? THEN 1 ELSE 0 END) as overdue_count,
+                SUM(CASE WHEN due_date < ? THEN remaining_amount ELSE 0 END) as overdue_amount,
+                SUM(CASE WHEN due_date >= ? AND due_date <= ? THEN 1 ELSE 0 END) as due_soon_count,
+                SUM(CASE WHEN due_date >= ? AND due_date <= ? THEN remaining_amount ELSE 0 END) as due_soon_amount
+            ", [$now, $now, $now, $threeDaysLater, $now, $threeDaysLater])
             ->first();
 
-        // 3.2: Sự cố chờ xử lý (Pending hoặc Processing)
+        // 3.2: Sự cố chờ xử lý
         $pendingIncidentsCount = Incident::whereIn('property_id', $propertyIds)
             ->whereIn('status', ['pending', 'processing'])
             ->count();
@@ -154,14 +237,57 @@ class DashboardService
         // 3.3: Hợp đồng sắp hết hạn (trong 30 ngày tới)
         $expiringLeasesCount = Lease::whereHas('room', fn($q) => $q->whereIn('property_id', $propertyIds))
             ->where('status', 'active')
-            ->whereBetween('end_date', [now()->toDateString(), now()->addDays(30)->toDateString()])
+            ->whereBetween('end_date', [$now, now()->addDays(30)->toDateString()])
             ->count();
 
         return [
-            'unpaid_invoices_count' => (int) ($unpaidInvoices->count ?? 0),
-            'unpaid_invoices_total' => (int) ($unpaidInvoices->total ?? 0),
+            // Dữ liệu dùng chung
+            'unpaid_invoices_count' => (int) ($invoiceStats->total_count ?? 0),
+            'unpaid_invoices_total' => (int) ($invoiceStats->total_amount ?? 0),
+
+            // Dữ liệu mới thêm cho khối Hóa Đơn Cần Chú Ý
+            'overdue_invoices_count' => (int) ($invoiceStats->overdue_count ?? 0),
+            'overdue_invoices_total' => (int) ($invoiceStats->overdue_amount ?? 0),
+            'due_soon_invoices_count' => (int) ($invoiceStats->due_soon_count ?? 0),
+            'due_soon_invoices_total' => (int) ($invoiceStats->due_soon_amount ?? 0),
+
             'pending_incidents_count' => $pendingIncidentsCount,
             'expiring_leases_count' => $expiringLeasesCount,
         ];
+    }
+
+    /**
+     * Lấy chi tiết danh sách hợp đồng sắp hết hạn (trong vòng 30 ngày)
+     */
+    private function getExpiringLeasesList(array $propertyIds): array
+    {
+        if (empty($propertyIds)) {
+            return [];
+        }
+
+        $now = now()->startOfDay();
+        $thirtyDaysLater = now()->addDays(30)->endOfDay();
+
+        $leases = Lease::with(['room.property', 'tenant'])
+            ->whereHas('room', fn($q) => $q->whereIn('property_id', $propertyIds))
+            ->where('status', 'active')
+            ->whereNotNull('end_date')
+            ->whereBetween('end_date', [$now, $thirtyDaysLater])
+            ->orderBy('end_date', 'asc')
+            ->get();
+
+        return $leases->map(function ($lease) use ($now) {
+            $endDate = \Carbon\Carbon::parse($lease->end_date)->startOfDay();
+            $daysLeft = (int) $now->diffInDays($endDate, false);
+
+            return [
+                'id' => $lease->id,
+                'room_name' => $lease->room->name ?? 'N/A',
+                'property_name' => $lease->room->property->name ?? 'N/A',
+                'tenant_name' => $lease->tenant->full_name ?? 'N/A',
+                'end_date' => $endDate->format('d/m/Y'),
+                'days_left' => max(0, $daysLeft), // Đảm bảo không bị số âm
+            ];
+        })->toArray();
     }
 }
