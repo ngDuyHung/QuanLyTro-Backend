@@ -13,14 +13,21 @@ use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 
 class MasterDataTemplateExport implements WithMultipleSheets
 {
+    private int $userId;
+
+    public function __construct(int $userId)
+    {
+        $this->userId = $userId;
+    }
+
     public function sheets(): array
     {
         return [
-            new Sheet1PropertyExport(),
-            new Sheet2RoomExport(),
-            new Sheet3ServiceExport(),
-            new Sheet4LeaseTenantExport(),
-            new Sheet5LeaseServiceExport(),
+            new Sheet1PropertyExport($this->userId),
+            new Sheet2RoomExport($this->userId),
+            new Sheet3ServiceExport($this->userId),
+            new Sheet4LeaseTenantExport($this->userId),
+            new Sheet5LeaseServiceExport($this->userId),
         ];
     }
 }

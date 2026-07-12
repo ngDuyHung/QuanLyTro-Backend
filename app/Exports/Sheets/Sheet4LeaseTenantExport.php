@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Exports\Sheets;
 
+use App\Models\Lease;
+use App\Models\RoomResident;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -17,10 +19,16 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Style\Conditional;
-use PhpOffice\PhpSpreadsheet\Style\Color;
 
 class Sheet4LeaseTenantExport implements FromCollection, WithStyles, ShouldAutoSize, WithEvents, WithTitle
 {
+    private int $userId;
+
+    public function __construct(int $userId)
+    {
+        $this->userId = $userId;
+    }
+
     public function title(): string
     {
         return 'Sheet4';
@@ -28,7 +36,8 @@ class Sheet4LeaseTenantExport implements FromCollection, WithStyles, ShouldAutoS
 
     public function collection(): Collection
     {
-        return collect([
+        // 1. Khởi tạo Banner Hướng dẫn và cấu trúc 14 tiêu đề cột chuẩn rest
+        $data = collect([
             [
                 '📌 HƯỚNG DẪN SHEET 4: Lưu thông tin Khách và Hợp đồng. ' .
                     '⚠️ LƯU Ý: Bạn BẮT BUỘC phải chọn "Mã khu nhà" trước, thì cột "Tên/Số phòng" mới xổ ra đúng danh sách phòng của khu đó.'
@@ -48,24 +57,88 @@ class Sheet4LeaseTenantExport implements FromCollection, WithStyles, ShouldAutoS
                 'Tiền cọc',
                 'Số Điện đầu',
                 'Số Nước đầu'
-            ],
-            [
-                'KH-01',
-                'P.101',
-                'Đại diện',
-                'Dương Thị Yến Linh',
-                '0987667898',
-                '082306003801',
-                '',
-                '2026-07-04',
-                12,
-                2,
-                3500000,
-                1000000,
-                140,
-                250
             ]
         ]);
+
+        // 2. Tải toàn bộ hợp đồng đang hoạt động (active) kèm nạp mượt data quan hệ liên đới
+        $leases = Lease::with(['room.property', 'tenant', 'meterReadings'])
+            ->whereHas('room.property', function ($query) {
+                $query->where('user_id', $this->userId);
+            })
+            ->where('status', 'active')
+            ->get()
+            ->sortBy([
+                ['room.property.code', 'asc'],
+                ['room.name', 'asc']
+            ]);
+
+        // 3. Cơ chế Fallback nếu trống trải dữ liệu
+        if ($leases->isEmpty()) {
+            $data->push([
+                'KH-01', 'P.101', 'Đại diện', 'Dương Thị Yến Linh', '0987667898',
+                '082306003801', '', '2026-07-04', 12, 2, 3500000, 1000000, 140, 250
+            ]);
+        } else {
+            // 4. Duyệt vòng lặp bóc tách xuất dữ liệu thật
+            foreach ($leases as $lease) {
+                // Lấy chỉ số điện nước bàn giao đầu kỳ (Sắp xếp theo ID nhỏ nhất để lấy record khởi tạo ban đầu)
+                $elecReading = $lease->meterReadings->where('type', 'electricity')->sortBy('id')->first();
+                $waterReading = $lease->meterReadings->where('type', 'water')->sortBy('id')->first();
+
+                $elecStart = $elecReading ? $elecReading->previous_reading : 0;
+                $waterStart = $waterReading ? $waterReading->previous_reading : 0;
+
+                // A. Đẩy dòng Khách Đại Diện (Chủ hợp đồng) lên trước
+                $data->push([
+                    $lease->room->property->code,
+                    $lease->room->name,
+                    'Đại diện',
+                    $lease->tenant->full_name,
+                    $lease->tenant->phone,
+                    $lease->tenant->id_card_number,
+                    $lease->tenant->email,
+                    $lease->start_date,
+                    $lease->billing_day,
+                    $lease->occupants_count,
+                    $lease->room_price,
+                    $lease->deposit,
+                    $elecStart,
+                    $waterStart
+                ]);
+
+                // B. Tìm kiếm và nạp các thành viên Ở Ghép (members) đang hoạt động cùng phòng này
+                $roommates = RoomResident::with('tenant')
+                    ->where('lease_id', $lease->id)
+                    ->where('role', 'member')
+                    ->where('status', 'active')
+                    ->get();
+
+                foreach ($roommates as $roommate) {
+                    if (!$roommate->tenant) {
+                        continue;
+                    }
+
+                    $data->push([
+                        $lease->room->property->code,
+                        $lease->room->name,
+                        'Ở ghép',
+                        $roommate->tenant->full_name,
+                        $roommate->tenant->phone,
+                        $roommate->tenant->id_card_number,
+                        $roommate->tenant->email,
+                        $roommate->move_in_date ?? $lease->start_date,
+                        '', // Bỏ trống công nợ tài chính đơn lẻ của thành viên ở ghép
+                        '',
+                        '',
+                        '',
+                        '',
+                        ''
+                    ]);
+                }
+            }
+        }
+
+        return $data;
     }
 
     public function styles(Worksheet $sheet): array
@@ -78,21 +151,29 @@ class Sheet4LeaseTenantExport implements FromCollection, WithStyles, ShouldAutoS
         $sheet->getRowDimension(2)->setRowHeight(25);
         $sheet->getStyle('A2:N2')->getFont()->setBold(true);
         $sheet->getStyle('A2:N2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FCE4D6');
-        $sheet->getStyle('A1:N3')->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('BFBFBF');
+        
+        $highestRow = $sheet->getHighestRow();
+        $sheet->getStyle("A1:N{$highestRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('BFBFBF');
 
-        $sheet->getStyle('E3:E1000')->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
-        $sheet->getStyle('F3:F1000')->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
-        $sheet->getStyle('K3:L1000')->getNumberFormat()->setFormatCode('#,##0');
+        // Định dạng text cho SĐT và CCCD để tránh bị Excel rụng mất số 0 ở đầu dòng
+        $sheet->getStyle("E3:E{$highestRow}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
+        $sheet->getStyle("F3:F{$highestRow}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
+        
+        // Định dạng phân tách hàng nghìn cho tiền tệ
+        $sheet->getStyle("K3:L{$highestRow}")->getNumberFormat()->setFormatCode('#,##0');
 
         return [];
     }
+
     public function registerEvents(): array
     {
         return [
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
+                $highestRow = $sheet->getHighestRow();
+                $maxRangeRow = max(1000, $highestRow); // Bảo đảm bao phủ tối thiểu 1000 dòng cho việc nhập thêm dữ liệu
 
-                // 1. CÁC HELPER DROPDOWN (Giữ nguyên như cũ)
+                // 1. CÁC HELPER DROPDOWN DỮ LIỆU ĐỘNG CHÉO SHEETS
                 $createDynamicDropdown = function ($targetSheet, $column) {
                     $validation = new DataValidation();
                     $validation->setType(DataValidation::TYPE_LIST)
@@ -122,27 +203,22 @@ class Sheet4LeaseTenantExport implements FromCollection, WithStyles, ShouldAutoS
                     return $validation;
                 };
 
-                // ÁP DỤNG DROPDOWN
-                $sheet->setDataValidation("A3:A1000", $createDynamicDropdown('Sheet1', 'A'));
-                $sheet->setDataValidation("B3:B1000", $createDependentDropdown());
-                $sheet->setDataValidation("C3:C1000", $createStaticDropdown('Đại diện,Ở ghép'));
+                // ÁP DỤNG DROPDOWN DATA VALIDATION
+                $sheet->setDataValidation("A3:A{$maxRangeRow}", $createDynamicDropdown('Sheet1', 'A'));
+                $sheet->setDataValidation("B3:B{$maxRangeRow}", $createDependentDropdown());
+                $sheet->setDataValidation("C3:C{$maxRangeRow}", $createStaticDropdown('Đại diện,Ở ghép'));
 
-                // =========================================================
-                // NÂNG CẤP UX: TỰ ĐỘNG BÔI XÁM CÁC Ô KHÔNG CẦN THIẾT NẾU LÀ "Ở GHÉP"
-                // =========================================================
+                // TỰ ĐỘNG BÔI XÁM CÁC Ô KHÔNG CẦN THIẾT NẾU LÀ "Ở GHÉP" (Giữ nguyên kiến trúc thông minh của bạn)
                 $condition = new Conditional();
                 $condition->setConditionType(Conditional::CONDITION_EXPRESSION);
-                // Nếu Cột C (Vai trò) là "Ở ghép"
                 $condition->addCondition('=$C3="Ở ghép"');
 
-                // Set màu nền thành xám nhạt và chữ thành màu xám chìm
                 $condition->getStyle()->getFill()->setFillType(Fill::FILL_SOLID)->getEndColor()->setARGB('FFEFEFEF');
                 $condition->getStyle()->getFont()->getColor()->setARGB('FFA6A6A6');
 
-                // Áp dụng điều kiện này cho các cột từ I đến N (Từ Ngày thu tiền đến Số nước đầu)
-                $conditionalStyles = $sheet->getStyle('I3:N1000')->getConditionalStyles();
+                $conditionalStyles = $sheet->getStyle("I3:N{$maxRangeRow}")->getConditionalStyles();
                 $conditionalStyles[] = $condition;
-                $sheet->getStyle('I3:N1000')->setConditionalStyles($conditionalStyles);
+                $sheet->getStyle("I3:N{$maxRangeRow}")->setConditionalStyles($conditionalStyles);
             },
         ];
     }

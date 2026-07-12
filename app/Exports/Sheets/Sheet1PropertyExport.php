@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Exports\Sheets;
 
+use App\Models\Property;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -19,6 +20,13 @@ use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 
 class Sheet1PropertyExport implements FromCollection, WithStyles, ShouldAutoSize, WithEvents, WithTitle
 {
+    private int $userId;
+
+    public function __construct(int $userId)
+    {
+        $this->userId = $userId;
+    }
+
     public function title(): string
     {
         return 'Sheet1';
@@ -26,12 +34,48 @@ class Sheet1PropertyExport implements FromCollection, WithStyles, ShouldAutoSize
 
     public function collection(): Collection
     {
-        return collect([
+        // 1. Khởi tạo 2 dòng Header & Hướng dẫn (Cố định)
+        $data = collect([
             ['📌 HƯỚNG DẪN SHEET 1: Khai báo danh sách Khu nhà. MỖI KHU NHÀ CHỈ NHẬP ĐÚNG 1 DÒNG DUY NHẤT.'],
             ['Mã khu nhà (*)', 'Tên khu nhà (*)', 'Loại nhà (*)', 'Trạng thái nhà', 'Địa chỉ (*)', 'Số tầng', 'Số phòng dự kiến', 'Người quản lý', 'Mô tả khu'],
-            ['KH-01', 'Khu trọ Cao Lỗ', 'Phòng trọ', 'Hoạt động', '180 Cao Lỗ, Quận 8', 3, 15, 'Nguyễn Duy Hùng', 'Khu an ninh'],
-            ['KH-02', 'Căn hộ Mini Q7', 'Căn hộ', 'Hoạt động', 'Số 10 Nguyễn Thị Thập, Q7', 5, 20, 'Trần Văn A', 'Khu cao cấp']
         ]);
+
+        // 2. Truy vấn dữ liệu thực tế
+        $properties = Property::where('user_id', $this->userId)->get();
+
+        // 3. Nếu KHÔNG CÓ dữ liệu, đẩy dòng mẫu (Fallback)
+        if ($properties->isEmpty()) {
+            $data->push(['KH-01', 'Khu trọ Cao Lỗ', 'Phòng trọ', 'Hoạt động', '180 Cao Lỗ, Quận 8', 3, 15, 'Nguyễn Duy Hùng', 'Khu an ninh']);
+            $data->push(['KH-02', 'Căn hộ Mini Q7', 'Căn hộ', 'Hoạt động', 'Số 10 Nguyễn Thị Thập, Q7', 5, 20, 'Trần Văn A', 'Khu cao cấp']);
+        } else {
+            // 4. Nếu CÓ dữ liệu, Map và dịch ngược Enum
+            $typeMap = [
+                'boarding_house' => 'Phòng trọ',
+                'apartment'      => 'Căn hộ',
+                'homestay'       => 'Homestay',
+                'house'          => 'Nhà nguyên căn'
+            ];
+            $statusMap = [
+                'active'   => 'Hoạt động',
+                'inactive' => 'Ngừng hoạt động'
+            ];
+
+            foreach ($properties as $property) {
+                $data->push([
+                    $property->code,
+                    $property->name, // Thay bằng property_name nếu DB lưu thế
+                    $typeMap[$property->type] ?? 'Phòng trọ',
+                    $statusMap[$property->status] ?? 'Hoạt động',
+                    $property->address,
+                    (int)($property->floors_count ?? 0),
+                    (int)($property->expected_rooms_count ?? 0),
+                    $property->manager_name,
+                    $property->description
+                ]);
+            }
+        }
+
+        return $data;
     }
 
     public function styles(Worksheet $sheet): array
@@ -44,7 +88,11 @@ class Sheet1PropertyExport implements FromCollection, WithStyles, ShouldAutoSize
         $sheet->getRowDimension(2)->setRowHeight(25);
         $sheet->getStyle('A2:I2')->getFont()->setBold(true);
         $sheet->getStyle('A2:I2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('DCE6F1');
-        $sheet->getStyle('A1:I4')->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('BFBFBF');
+
+        // Cập nhật lại border tự động cover hết dữ liệu hiện có
+        $highestRow = $sheet->getHighestRow();
+        $sheet->getStyle("A1:I{$highestRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('BFBFBF');
+        $sheet->getStyle("F3:G{$highestRow}")->getNumberFormat()->setFormatCode('0');
         return [];
     }
 

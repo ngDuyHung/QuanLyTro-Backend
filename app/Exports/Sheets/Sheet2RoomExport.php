@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Exports\Sheets;
 
+use App\Models\Room;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -19,6 +20,13 @@ use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 
 class Sheet2RoomExport implements FromCollection, WithStyles, ShouldAutoSize, WithEvents, WithTitle
 {
+    private int $userId;
+
+    public function __construct(int $userId)
+    {
+        $this->userId = $userId;
+    }
+
     public function title(): string
     {
         return 'Sheet2';
@@ -26,30 +34,85 @@ class Sheet2RoomExport implements FromCollection, WithStyles, ShouldAutoSize, Wi
 
     public function collection(): Collection
     {
-        return collect([
+        // 1. Khởi tạo Header và Hướng dẫn
+        $data = collect([
             [
                 '📌 HƯỚNG DẪN SHEET 2: Khai báo danh sách các Phòng. ' .
                     '⚠️ QUAN TRỌNG: Các phòng thuộc cùng 1 khu nhà bắt buộc phải được nhập LIỀN KỀ NHAU (không nhập xen kẽ).'
             ],
-            ['Mã khu nhà (*)', 'Tên/Số phòng (*)', 'Giá thuê phòng (*)', 'Tầng số', 'Trạng thái phòng (*)', 'Diện tích (m2)', 'Số người tối đa', 'Ngày thu tiền', 'Cho ở ghép? (*)', 'Đăng công khai? (*)'],
-            ['KH-01', 'P.101', 3500000, 1, 'Còn trống', 25, 5, 12, 'Có', 'Có'],
-            ['KH-01', 'P.102', 3500000, 1, 'Còn trống', 25, 5, 12, 'Có', 'Có'],
-            ['KH-02', 'CH-01', 5000000, 1, 'Đã cho thuê', 40, 4, 5, 'Không', 'Có']
+            ['Mã khu nhà (*)', 'Tên/Số phòng (*)', 'Giá thuê phòng (*)', 'Tiền cọc/Thế chân', 'Tầng số', 'Trạng thái phòng (*)', 'Diện tích (m2)', 'Số người tối đa', 'Ngày thu tiền', 'Cho ở ghép? (*)', 'Đăng công khai? (*)'],
         ]);
+
+        // 2. Truy vấn dữ liệu thực tế và lấy kèm Property. 
+        // Bắt buộc SortBy property.code để đảm bảo Data Validation (hàm MATCH ở Excel) không bị lỗi.
+        $rooms = Room::with('property')
+            ->whereHas('property', function ($query) {
+                $query->where('user_id', $this->userId);
+            })
+            ->get()
+            ->filter(function ($room) {
+                return $room->property !== null; // Loại bỏ các phòng không có khu nhà hợp lệ
+            })
+            ->sortBy('property.code');
+
+        // 3. Nếu KHÔNG CÓ dữ liệu -> Xuất dữ liệu mẫu (Fallback)
+        if ($rooms->isEmpty()) {
+            $data->push(['KH-01', 'P.101', 3500000, 100000, 1, 'Còn trống', 25, 5, 12, 'Có', 'Có']);
+            $data->push(['KH-01', 'P.102', 3500000, 100000, 1, 'Còn trống', 25, 5, 12, 'Có', 'Có']);
+            $data->push(['KH-02', 'CH-01', 5000000, 100000, 1, 'Đã cho thuê', 40, 4, 5, 'Không', 'Có']);
+        } else {
+            // 4. Nếu CÓ dữ liệu -> Map và Dịch ngược Enum
+            $statusMap = [
+                'available'   => 'Còn trống',
+                'maintenance' => 'Đang bảo trì',
+                'occupied'    => 'Đã cho thuê',
+                'reserved'    => 'Đã đặt cọc'
+            ];
+
+            foreach ($rooms as $room) {
+                // Ép kiểu status
+                $statusValue = ($room->status instanceof \BackedEnum) ? $room->status->value : (string)$room->status;
+
+                // Logic mới: Nếu là 0 thì hiện "Trệt", nếu null hoặc khác thì hiện số
+                $floorDisplay = ($room->floor_number === 0) ? 'Trệt' : (string)$room->floor_number;
+
+                $data->push([
+                    $room->property->code,
+                    $room->name,
+                    (int)$room->current_price,
+                    (int)($room->deposit_amount ?? 100000), // Tiền cọc/Thế chân
+                    $floorDisplay, // Trả về "Trệt" hoặc "1", "2"...
+                    $statusMap[$statusValue] ?? 'Còn trống',
+                    (float)($room->area ?? 0),
+                    (int)($room->max_occupants ?? 0),
+                    (int)($room->billing_day ?? 1),
+                    $room->allow_shared ? 'Có' : 'Không',
+                    $room->is_public ? 'Có' : 'Không',
+                ]);
+            }
+        }
+
+        return $data;
     }
 
     public function styles(Worksheet $sheet): array
     {
-        $sheet->mergeCells('A1:J1');
+        $sheet->mergeCells('A1:K1');
         $sheet->getRowDimension(1)->setRowHeight(30);
         $sheet->getStyle('A1')->getFont()->setBold(true)->getColor()->setARGB('C00000');
         $sheet->getStyle('A1')->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
 
         $sheet->getRowDimension(2)->setRowHeight(25);
-        $sheet->getStyle('A2:J2')->getFont()->setBold(true);
-        $sheet->getStyle('A2:J2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('E2EFDA');
-        $sheet->getStyle('A1:J5')->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('BFBFBF');
-        $sheet->getStyle('C3:C1000')->getNumberFormat()->setFormatCode('#,##0');
+        $sheet->getStyle('A2:K2')->getFont()->setBold(true);
+        $sheet->getStyle('A2:K2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('E2EFDA');
+
+        // Vẽ Border động tùy theo số lượng dòng thực tế
+        $highestRow = $sheet->getHighestRow();
+        $sheet->getStyle("A1:K{$highestRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('BFBFBF');
+
+        // Đảm bảo cột Giá tiền (Cột C) có phân tách hàng nghìn
+        $sheet->getStyle("C3:C{$highestRow}")->getNumberFormat()->setFormatCode('#,##0');
+        $sheet->getStyle("D3:D{$highestRow}")->getNumberFormat()->setFormatCode('#,##0');
         return [];
     }
 
@@ -59,7 +122,6 @@ class Sheet2RoomExport implements FromCollection, WithStyles, ShouldAutoSize, Wi
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
 
-                // 1. HELPER: Dropdown Lấy dữ liệu động từ Sheet khác (CÓ CHẶN GÕ TAY)
                 $createDynamicDropdown = function ($targetSheet, $column) {
                     $validation = new DataValidation();
                     $validation->setType(DataValidation::TYPE_LIST)
@@ -71,7 +133,6 @@ class Sheet2RoomExport implements FromCollection, WithStyles, ShouldAutoSize, Wi
                     return $validation;
                 };
 
-                // 2. HELPER: Dropdown Tĩnh (CÓ CHẶN GÕ TAY)
                 $createStaticDropdown = function ($options) {
                     $validation = new DataValidation();
                     $validation->setType(DataValidation::TYPE_LIST)->setAllowBlank(true)->setShowDropDown(true)
@@ -81,12 +142,10 @@ class Sheet2RoomExport implements FromCollection, WithStyles, ShouldAutoSize, Wi
                     return $validation;
                 };
 
-                // ===== ÁP DỤNG CHO SHEET 2 (Phòng) =====
-                // Nếu bạn đang dán vào Sheet 3 thì sửa lại các cột áp dụng cho phù hợp nhé:
-                $sheet->setDataValidation("A3:A1000", $createDynamicDropdown('Sheet1', 'A')); // Mã Khu
-                $sheet->setDataValidation("E3:E1000", $createStaticDropdown('Còn trống,Đang bảo trì,Đã cho thuê,Đã đặt cọc'));
-                $sheet->setDataValidation("I3:I1000", $createStaticDropdown('Có,Không'));
+                $sheet->setDataValidation("A3:A1000", $createDynamicDropdown('Sheet1', 'A'));
+                $sheet->setDataValidation("F3:F1000", $createStaticDropdown('Còn trống,Đang bảo trì,Đã cho thuê,Đã đặt cọc'));
                 $sheet->setDataValidation("J3:J1000", $createStaticDropdown('Có,Không'));
+                $sheet->setDataValidation("K3:K1000", $createStaticDropdown('Có,Không'));
             },
         ];
     }

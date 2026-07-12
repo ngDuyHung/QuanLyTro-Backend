@@ -240,6 +240,7 @@ class RoomService
             'property_id'   => $propertyId,
             'name'          => $roomName,
             'current_price' => (int)$data['room_current_price'],
+            'deposit_amount' => !empty($data['room_deposit']) ? (int)$data['room_deposit'] : 0,
             'floor_number'  => $data['room_floor_number'] !== null ? (int)$data['room_floor_number'] : null,
             'status'        => $roomStatus,
             'area'          => $data['room_area'] ?? null,

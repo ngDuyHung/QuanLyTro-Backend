@@ -41,10 +41,11 @@ class Sheet2RoomImport implements ToCollection
                     '0' => ['required', 'string'],
                     '1' => ['required', 'string'],
                     '2' => ['required', 'integer', 'min:0'],
-                    '4' => ['required', 'string', 'in:Còn trống,Đang bảo trì,Đã cho thuê,Đã đặt cọc'],
+                    '3' => ['nullable', 'integer'],
+                    '5' => ['required', 'string', 'in:Còn trống,Đang bảo trì,Đã cho thuê,Đã đặt cọc'],
                 ],
                 ['required' => '[:attribute] bắt buộc nhập.', 'integer' => '[:attribute] phải là số nguyên.'],
-                ['0' => 'Mã khu nhà', '1' => 'Tên phòng', '2' => 'Giá thuê', '4' => 'Trạng thái phòng']
+                ['0' => 'Mã khu nhà', '1' => 'Tên phòng', '2' => 'Giá thuê', '3' => 'Tiền cọc', '5' => 'Trạng thái phòng']
             );
 
             if ($validator->fails()) {
@@ -61,17 +62,22 @@ class Sheet2RoomImport implements ToCollection
                         $this->propertyCache[$propertyCode] = $property->id;
                     }
 
+                    // Logic xử lý tầng: "Trệt" -> 0
+                    $floorInput = trim((string)$rowData[4]);
+                    $floorNumber = (strtolower($floorInput) === 'trệt') ? 0 : (int)$floorInput;
+
                     $statusMap = ['Còn trống' => 'available', 'Đang bảo trì' => 'maintenance', 'Đã cho thuê' => 'occupied', 'Đã đặt cọc' => 'reserved'];
                     $mappedData = [
                         'room_name'          => $rowData[1],
                         'room_current_price' => $rowData[2],
-                        'room_floor_number'  => $rowData[3],
-                        'room_status'        => $statusMap[trim((string)$rowData[4])] ?? 'available',
-                        'room_area'          => $rowData[5],
-                        'room_max_occupants' => $rowData[6],
-                        'room_billing_day'   => $rowData[7],
-                        'room_allow_shared'  => (trim((string)$rowData[8]) === 'Có') ? 1 : 0,
-                        'room_is_public'     => (trim((string)$rowData[9]) === 'Có') ? 1 : 0,
+                        'room_deposit'       => $rowData[3],
+                        'room_floor_number'  => $floorNumber,
+                        'room_status'        => $statusMap[trim((string)$rowData[5])] ?? 'available',
+                        'room_area'          => $rowData[6],
+                        'room_max_occupants' => $rowData[7],
+                        'room_billing_day'   => $rowData[8],
+                        'room_allow_shared'  => (trim((string)$rowData[9]) === 'Có') ? 1 : 0,
+                        'room_is_public'     => (trim((string)$rowData[10]) === 'Có') ? 1 : 0,
                     ];
 
                     $this->roomService->createFromImport($this->propertyCache[$propertyCode], $this->userId, $mappedData, false);

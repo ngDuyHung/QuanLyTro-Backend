@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Import\ImportMasterDataRequest;
 use App\Services\ImportService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Throwable;
 
 class ImportController extends Controller
@@ -59,10 +60,11 @@ class ImportController extends Controller
     /**
      * Tải file Excel cấu trúc mẫu kèm dữ liệu ví dụ
      */
-    public function downloadTemplate()
+    public function downloadTemplate(Request $request)
     {
         try {
-            return $this->importService->downloadTemplate();
+            $userId = $request->user()->id; // Lấy ID người dùng
+            return $this->importService->downloadTemplate($userId);
         } catch (\Throwable $exception) {
             return response()->json([
                 'message' => 'Không thể khởi tạo file mẫu lúc này.',

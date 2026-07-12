@@ -31,8 +31,8 @@ class StoreLeaseRequest extends FormRequest
             // ── Thông tin khách thuê (tạo mới cùng lúc) ─────────────────
             'tenant'                       => ['required', 'array'],
             'tenant.full_name'             => ['required', 'string', 'max:100'],
-            'tenant.email'                 => ['nullable', 'email', 'max:255', 'unique:tenants,email'],
-            'tenant.phone'                 => ['required', 'string', 'regex:/^[0-9]{9,15}$/'],
+            'tenant.email'                 => ['nullable', 'email', 'max:255', 'unique:tenants,email', 'unique:users,email'],
+            'tenant.phone'                 => ['required', 'string', 'regex:/^[0-9]{9,15}$/', 'unique:tenants,phone', 'unique:users,phone'],
             'tenant.id_card_number'        => ['required', 'string', 'max:20', 'unique:tenants,id_card_number'],
             'tenant.id_card_front_image'   => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'tenant.id_card_back_image'    => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
@@ -84,6 +84,7 @@ class StoreLeaseRequest extends FormRequest
             'tenant.email.unique'                  => 'Email này đã được sử dụng.',
             'tenant.phone.required'                => 'Số điện thoại khách thuê không được để trống.',
             'tenant.phone.regex'                   => 'Số điện thoại không hợp lệ (9–15 chữ số).',
+            'tenant.phone.unique'                  => 'Số điện thoại này đã được sử dụng.',
             'tenant.id_card_number.required'       => 'Số CCCD/CMND không được để trống.',
             'tenant.id_card_number.unique'         => 'Số CCCD/CMND này đã tồn tại trong hệ thống.',
             'tenant.id_card_front_image.image'     => 'Ảnh mặt trước CCCD phải là file hình ảnh.',

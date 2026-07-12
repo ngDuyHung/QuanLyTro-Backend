@@ -30,9 +30,9 @@ class ImportService
     /**
      * Xuất file template mẫu định dạng xlsx
      */
-    public function downloadTemplate()
+    public function downloadTemplate($userId)
     {
         // Trả về file download trực tiếp xuống trình duyệt người dùng
-        return Excel::download(new MasterDataTemplateExport, 'mau_import_he_thong_phong.xlsx');
+        return Excel::download(new MasterDataTemplateExport($userId), 'file_he_thong_phong.xlsx');
     }
 }
