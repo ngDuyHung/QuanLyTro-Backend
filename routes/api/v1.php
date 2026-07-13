@@ -143,6 +143,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/invoices/{id}/export-pdf', [SettingController::class, 'exportInvoicePdf']);
     Route::get('/invoices/{id}/preview', [InvoiceController::class, 'previewHtml']);
 
+    // Route xuất hình ảnh hóa đơn (Có thể đặt tiền tố /invoices cho chuẩn RESTful)
+    Route::get('/invoices/{id}/export-image', [InvoiceController::class, 'exportInvoiceImage']);
+    Route::get('invoices/{id}/export-pdf-image', [InvoiceController::class, 'exportInvoicePdfImage']);
+
     // ── Financial Transactions (Thu chi) ─────────────────────────────────────
     Route::get('financial-transactions', [FinancialTransactionController::class, 'index'])
         ->name('financial-transactions.index');

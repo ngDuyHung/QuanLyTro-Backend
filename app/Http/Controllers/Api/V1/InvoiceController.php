@@ -263,4 +263,38 @@ class InvoiceController extends Controller
         $html = $settingService->compileInvoiceHtml($id, $request->user()->id);
         return response()->json(['html' => $html]);
     }
+
+
+    /**
+     * Xuất ảnh giao diện Hóa đơn (Trả về file PNG)
+     */
+    // Thêm SettingService $settingService vào tham số
+    public function exportInvoiceImage(Request $request, $id, SettingService $settingService)
+    {
+        $userId = $request->user()->id;
+
+        // SỬA DÒNG NÀY: Gọi trực tiếp từ $settingService thay vì $this->invoiceService
+        $base64Image = $settingService->generateInvoiceImage((int) $id, $userId);
+
+        $imageCode = base64_decode($base64Image);
+
+        return response($imageCode)
+            ->header('Content-Type', 'image/png')
+            ->header('Content-Disposition', 'attachment; filename="Hoa_don_chi_tiet_' . $id . '.png"');
+    }
+
+    /**
+     * Xuất ảnh bản in PDF Hóa đơn (Trả về file PNG)
+     */
+    public function exportInvoicePdfImage(Request $request, $id, SettingService $settingService)
+    {
+        $userId = $request->user()->id;
+
+        $base64Image = $settingService->generateInvoicePdfImage((int) $id, $userId);
+        $imageCode = base64_decode($base64Image);
+
+        return response($imageCode)
+            ->header('Content-Type', 'image/png')
+            ->header('Content-Disposition', 'attachment; filename="Hoa_don_ban_in_' . $id . '.png"');
+    }
 }
