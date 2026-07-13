@@ -472,215 +472,53 @@ class SettingService
     }
 
 
-    /**
-     * Tạo HTML giao diện chuẩn App Mobile (dành riêng để xuất ảnh chia sẻ Zalo)
-     */
-    public function compileInvoiceMobileHtml(int $invoiceId, int $userId): string
-    {
-        $invoice = \App\Models\Invoice::with(['items', 'meterReadings', 'lease.tenant', 'room.property.user'])
-            ->whereHas('room.property', function ($query) use ($userId) {
-                $query->where('user_id', $userId);
-            })
-            ->findOrFail($invoiceId);
-
-        // Map trạng thái
-        $statusLabel = match ((string) $invoice->status) {
-            'draft' => 'Bản nháp',
-            'issued' => 'Chưa thu đủ',
-            'partially_paid' => 'Trả một phần',
-            'paid' => 'Đã thu xong',
-            'overdue' => 'Quá hạn',
-            'cancelled' => 'Đã hủy',
-            default => (string) $invoice->status,
-        };
-        $statusColor = ((int)$invoice->remaining_amount <= 0 || $invoice->status === 'paid')
-            ? 'bg-green-50 text-green-600 border-green-200'
-            : 'bg-amber-50 text-amber-600 border-amber-200';
-
-        // Render các items
-        $itemsHtml = '';
-        foreach ($invoice->items as $item) {
-            $isUtility = in_array($item->charge_type, ['electricity', 'water']);
-            $meter = $invoice->meterReadings->where('type', $item->charge_type)->first();
-            $free = (float) $item->free_quantity_snapshot;
-
-            $itemSubtitle = "";
-            if ($isUtility && $meter) {
-                $itemSubtitle = "Số mới: {$meter->current_reading}, Số cũ: {$meter->previous_reading}";
-            } elseif ($item->charge_type === 'room') {
-                $priceFormat = number_format((float)$item->unit_price_snapshot, 0, ',', '.');
-                $itemSubtitle = "{$item->quantity} " . ($item->unit ?: "ngày") . ", giá: {$priceFormat} đ";
-            } else {
-                $itemSubtitle = "Quy cách: {$item->quantity} " . ($item->unit ?: "Lần");
-            }
-
-            $amount = number_format((float) $item->amount, 0, ',', '.');
-
-            $itemsHtml .= "
-                <div class='py-3.5 first:pt-0 last:pb-0'>
-                    <div class='flex justify-between items-start'>
-                        <div>
-                            <h4 class='font-bold text-slate-800 text-[14px]'>{$item->description}</h4>
-                            <p class='text-[12px] text-slate-400 mt-0.5 font-medium'>{$itemSubtitle}</p>
-                        </div>
-                        <div class='text-right'>
-                            <span class='text-[11px] text-slate-400 block'>Thành tiền</span>
-                            <span class='font-bold text-slate-800 text-[15px] mt-0.5 block'>{$amount} đ</span>
-                        </div>
-                    </div>
-                </div>
-            ";
-        }
-
-        $periodLabel = $invoice->period_to ? \Carbon\Carbon::parse($invoice->period_to)->format('m/Y') : '—';
-        $issueDate = $invoice->issue_date ? \Carbon\Carbon::parse($invoice->issue_date)->format('d/m/Y') : '—';
-        $dueDate = $invoice->due_date ? \Carbon\Carbon::parse($invoice->due_date)->format('d/m/Y') : '—';
-        $totalAmount = number_format((float) $invoice->total_amount, 0, ',', '.');
-        $paidAmount = number_format((float) $invoice->paid_amount, 0, ',', '.');
-        $remainingAmount = number_format((float) $invoice->remaining_amount, 0, ',', '.');
-        $allocationCount = $invoice->allocations ? $invoice->allocations->count() : 0;
-        $remainingColor = (int)$invoice->remaining_amount <= 0 ? 'text-emerald-600' : 'text-red-500';
-        $remainingText = (int)$invoice->remaining_amount <= 0 ? 'Đã trả xong' : "{$remainingAmount} đ";
-        $reason = $invoice->invoice_type === 'monthly' ? 'Thu tiền hàng tháng' : 'Thu chi phát sinh';
-
-        // Trả về HTML chứa Tailwind để render ảnh
-        return <<<HTML
-        <!DOCTYPE html>
-        <html lang="vi">
-        <head>
-            <meta charset="UTF-8">
-            <script src="https://cdn.tailwindcss.com"></script>
-            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-            <style>body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }</style>
-        </head>
-        <body class="p-6 w-[450px]">
-            <div class="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm">
-                <div class="text-center pb-2">
-                    <h3 class="text-[22px] font-black text-slate-800">Phòng {$invoice->room->name}</h3>
-                    <p class="text-[14px] text-slate-500 font-medium mt-1">{$invoice->room->property->name}</p>
-                </div>
-
-                <div class="grid grid-cols-3 border border-slate-200 rounded-xl p-3 text-center bg-white mt-4">
-                    <div>
-                        <span class="text-slate-400 font-medium block text-[11px]">Hóa đơn tháng</span>
-                        <span class="font-bold text-slate-700 block mt-1 text-[13px]">T.{$periodLabel}</span>
-                    </div>
-                    <div class="border-x border-slate-200">
-                        <span class="text-slate-400 font-medium block text-[11px]">Ngày lập h.đơn</span>
-                        <span class="font-bold text-slate-700 block mt-1 text-[13px]">{$issueDate}</span>
-                    </div>
-                    <div>
-                        <span class="text-slate-400 font-medium block text-[11px]">Hạn nạp tiền</span>
-                        <span class="font-bold text-slate-700 block mt-1 text-[13px]">{$dueDate}</span>
-                    </div>
-                </div>
-
-                <div class="flex justify-between items-start border-b border-slate-100 pb-4 mt-5">
-                    <span class="text-slate-400 font-medium text-[13px]">Kính gửi</span>
-                    <div class="text-right font-bold text-slate-800 text-[14px]">
-                        <div>{$invoice->lease->tenant->full_name}</div>
-                        <div class="text-[12px] text-slate-400 font-normal mt-0.5">SĐT: {$invoice->lease->tenant->phone}</div>
-                    </div>
-                </div>
-
-                <div class="flex justify-between items-center border-b border-slate-100 py-4">
-                    <div>
-                        <span class="text-slate-400 font-medium block text-[12px]">Lý do thu</span>
-                        <span class="font-bold text-slate-800 mt-1 block text-[14px]">{$reason}</span>
-                    </div>
-                    <div>
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-bold border {$statusColor}">
-                            {$statusLabel}
-                        </span>
-                    </div>
-                </div>
-
-                <div class="divide-y divide-slate-100 py-2 mt-2">
-                    {$itemsHtml}
-                </div>
-
-                <div class="pt-3 border-t border-slate-100 space-y-2 mt-2">
-                    <div class="flex justify-between text-slate-400 font-medium text-[13px]">
-                        <span>Tổng tiền dịch vụ</span>
-                        <span class="font-bold text-slate-700">{$totalAmount} đ</span>
-                    </div>
-                    <div class="flex justify-between text-slate-400 font-medium text-[13px]">
-                        <span>Đã trả</span>
-                        <span class="font-bold text-green-600">{$paidAmount} đ</span>
-                    </div>
-                </div>
-
-                <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-4 flex justify-between items-center mt-5">
-                    <div>
-                        <span class="text-slate-500 block font-medium text-[12px]">Số lần thanh toán</span>
-                        <span class="font-bold text-slate-800 block mt-1 text-[14px]">{$allocationCount} lần</span>
-                    </div>
-                    <div class="text-right">
-                        <span class="text-slate-500 block font-medium text-[12px]">Tổng phải trả</span>
-                        <span class="font-black {$remainingColor} block mt-1 text-[16px]">{$remainingText}</span>
-                    </div>
-                </div>
-
-                <p class="text-[11px] text-slate-400 italic text-center font-medium mt-5">
-                    * Chú ý: Vui lòng thanh toán đúng hạn và trước ngày {$dueDate}
-                </p>
-            </div>
-        </body>
-        </html>
-        HTML;
-    }
-
-    /**
-     * Dùng Browsershot chụp HTML thành ảnh PNG
-     */
-    public function generateInvoiceImage(int $invoiceId, int $userId)
-    {
-        $html = $this->compileInvoiceMobileHtml($invoiceId, $userId);
-
-        return \Spatie\Browsershot\Browsershot::html($html)
-            ->windowSize(450, 900) // Kích thước Mobile chuẩn
-            ->deviceScaleFactor(2) // Tăng độ nét gấp đôi (Retina)
-            ->format('png')
-            ->base64Screenshot(); // Trả về dạng chuỗi Base64
-    }
 
 
     /**
-     * Dùng Browsershot chụp bản in hóa đơn (Giao diện PDF A5) thành ảnh PNG
+     * Dùng Imagick để chuyển trang 1 của file PDF (DomPDF) thành ảnh PNG
      */
     public function generateInvoicePdfImage(int $invoiceId, int $userId)
     {
-        // Lấy lại đúng cục HTML dùng cho PDF
-        $compiledHtml = $this->compileInvoiceHtml($invoiceId, $userId);
+        try {
+            // 1. Khởi tạo và lấy file PDF từ hàm đã có sẵn
+            $pdf = $this->generateInvoicePdf($invoiceId, $userId);
+            $pdfData = $pdf->output(); // Lấy raw binary của PDF
 
-        $fullHtml = <<<HTML
-        <!DOCTYPE html>
-        <html lang="vi">
-        <head>
-            <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-            <style>
-                body { 
-                    font-family: 'DejaVu Sans', sans-serif; 
-                    font-size: 14px;
-                    line-height: 1.5;
-                    color: #1e293b;
-                    background-color: #ffffff;
-                    padding: 20px;
-                }
-            </style>
-        </head>
-        <body>
-            {$compiledHtml}
-        </body>
-        </html>
-        HTML;
+            // 2. Khởi tạo Imagick để xử lý ảnh
+            $im = new \Imagick();
 
-        // Chụp ảnh với khổ dọc (tương tự A5)
-        return \Spatie\Browsershot\Browsershot::html($fullHtml)
-            ->windowSize(700, 1000) // Khung tỷ lệ A5
-            ->deviceScaleFactor(2)  // Nét gấp đôi
-            ->fullPage()            // Đảm bảo chụp hết nếu bảng quá dài
-            ->format('png')
-            ->base64Screenshot();
+            // BẮT BUỘC: Set độ phân giải (DPI) TRƯỚC khi đọc ảnh để ảnh sau khi xuất ra được nét (như HD)
+            $im->setResolution(300, 300);
+
+            // Đọc nội dung PDF từ chuỗi binary
+            $im->readImageBlob($pdfData);
+
+            // Chọn trang đầu tiên của hóa đơn (Index 0)
+            $im->setIteratorIndex(0);
+
+            // Cài đặt định dạng xuất ra là PNG
+            $im->setImageFormat('png');
+
+            // XỬ LÝ NỀN TRẮNG: Rất quan trọng vì PDF mặc định không có màu nền. 
+            // Nếu không có đoạn này, ảnh xuất ra có thể bị nền đen hoặc trong suốt.
+            $im->setImageBackgroundColor('white');
+            $im->setImageAlphaChannel(\Imagick::ALPHACHANNEL_REMOVE);
+            $im->mergeImageLayers(\Imagick::LAYERMETHOD_FLATTEN);
+
+            // Lấy dữ liệu ảnh
+            $imageBlob = $im->getImageBlob();
+
+            // Giải phóng bộ nhớ RAM ngay lập tức
+            $im->clear();
+            $im->destroy();
+
+            // Encode sang Base64 để tương thích 100% với InvoiceController hiện tại của bạn
+            return base64_encode($imageBlob);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Lỗi xuất ảnh bằng Imagick: ' . $e->getMessage());
+            throw new \App\Exceptions\Domain\BusinessException(
+                'Lỗi hệ thống: Không thể xuất ảnh hóa đơn. Máy chủ có thể không hỗ trợ Imagick/Ghostscript.'
+            );
+        }
     }
 }
