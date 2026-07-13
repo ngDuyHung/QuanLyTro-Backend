@@ -120,11 +120,12 @@ class InvoiceController extends Controller
         $invoice->load([
             'lease.room.property',
             'lease.tenant',
-            'property',
+            'property.user',
             'room',
             'items.servicePrice',
             'allocations.financialTransaction',
             'financialTransactions',
+            'meterReadings',
         ]);
 
         return (new InvoiceResource($invoice))->response();

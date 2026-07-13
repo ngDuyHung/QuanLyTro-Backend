@@ -87,6 +87,7 @@ class InvoiceResource extends JsonResource
                     'id' => $this->property->id,
                     'name' => $this->property->name,
                     'address' => $this->property->address ?? null,
+                    'phone' => $this->property->user->phone ?? null,
                 ];
             }),
 
