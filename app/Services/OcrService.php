@@ -77,6 +77,8 @@ PROMPT;
         return $this->parseJsonResponse($text);
     }
 
+
+
     /**
      * Kỹ thuật dọn dẹp JSON từ mẫu của bạn
      */
@@ -105,6 +107,104 @@ PROMPT;
         return [
             'full_name' => $decoded['full_name'] ?? '',
             'id_card_number' => $decoded['id_card_number'] ?? '',
+        ];
+    }
+
+
+    /**
+     * Gửi ảnh Đồng hồ điện/nước sang Gemini để trích xuất chỉ số
+     */
+    public function extractMeterReading(UploadedFile $image, string $type): array
+    {
+        $apiKey = config('services.gemini.api_key');
+
+        if (!$apiKey) {
+            throw new Exception('Server chưa cấu hình GEMINI_API_KEY.');
+        }
+
+        $imageData = base64_encode(file_get_contents($image->getRealPath()));
+        $mimeType = $image->getMimeType();
+
+        $meterName = $type === 'electricity' ? 'đồng hồ điện (công tơ điện)' : 'đồng hồ nước';
+
+        // Prompt hướng dẫn AI bỏ qua phần thập phân màu đỏ và kim quay
+        $prompt = <<<PROMPT
+Bạn là hệ thống trích xuất dữ liệu (OCR). Hãy đọc ảnh chụp {$meterName} này.
+Nhiệm vụ: Trích xuất chỉ số tiêu thụ chính đang hiển thị.
+Quy tắc:
+1. Chỉ lấy phần số nguyên trên dãy số chính hoặc màn hình điện tử.
+2. Tuyệt đối BỎ QUA các kim đồng hồ xoay nhỏ bên dưới (nếu có).
+3. BỎ QUA các chữ số thập phân (thường có màu đỏ hoặc ở vòng quay riêng bên phải).
+Chỉ trả về JSON hợp lệ, không kèm markdown, theo cấu trúc:
+{
+  "reading": 1234
+}
+PROMPT;
+
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=' . $apiKey;
+
+        $response = Http::timeout(30)->post($url, [
+            'contents' => [
+                [
+                    'parts' => [
+                        ['text' => $prompt],
+                        [
+                            'inline_data' => [
+                                'mime_type' => $mimeType,
+                                'data' => $imageData
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            'generationConfig' => [
+                'temperature' => 0.1,
+                'responseMimeType' => 'application/json',
+            ],
+        ]);
+
+        if ($response->failed()) {
+            throw new Exception('Lỗi khi kết nối với dịch vụ AI.');
+        }
+
+        $result = $response->json();
+        $text = $result['candidates'][0]['content']['parts'][0]['text'] ?? '';
+
+        if (trim($text) === '') {
+            throw new Exception('Gemini không trả về nội dung.');
+        }
+        
+        // Gọi hàm dọn dẹp JSON dành riêng cho đồng hồ
+        return $this->parseMeterJsonResponse($text);
+    }
+
+
+    /**
+     * Dọn dẹp và parse JSON dành riêng cho Đồng hồ điện nước
+     */
+    private function parseMeterJsonResponse(string $text): array
+    {
+        $cleaned = trim($text);
+        $cleaned = preg_replace('/^```json\s*/u', '', $cleaned) ?? $cleaned;
+        $cleaned = preg_replace('/^```\s*/u', '', $cleaned) ?? $cleaned;
+        $cleaned = preg_replace('/\s*```$/u', '', $cleaned) ?? $cleaned;
+
+        $start = strpos($cleaned, '{');
+        $end = strrpos($cleaned, '}');
+
+        if ($start === false || $end === false || $end <= $start) {
+            throw new Exception('Không tìm thấy cấu trúc JSON hợp lệ từ kết quả.');
+        }
+
+        $json = substr($cleaned, $start, $end - $start + 1);
+        $decoded = json_decode($json, true);
+
+        if (!is_array($decoded)) {
+            throw new Exception('JSON trả về không thể giải mã.');
+        }
+
+        return [
+            'reading' => isset($decoded['reading']) ? (int) $decoded['reading'] : null,
         ];
     }
 }

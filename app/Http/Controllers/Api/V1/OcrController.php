@@ -38,4 +38,26 @@ class OcrController extends Controller
             ], 422);
         }
     }
+
+    public function scanMeter(Request $request): JsonResponse
+    {
+        $request->validate([
+            'image' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'type'  => ['required', 'in:electricity,water']
+        ]);
+
+        try {
+            $data = $this->ocrService->extractMeterReading($request->file('image'), $request->type);
+
+            return response()->json([
+                'message' => 'Trích xuất chỉ số thành công.',
+                'data' => $data // Trả về format: {"reading": 1234}
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'message' => 'Không thể quét tự động. Vui lòng nhập thủ công.',
+                'error' => $e->getMessage()
+            ], 422);
+        }
+    }
 }

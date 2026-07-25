@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\V1\RoomReservationController;
 use App\Http\Controllers\Api\V1\SepayConfigController;
 use App\Http\Controllers\Api\V1\SettingController;
 use App\Http\Controllers\Api\V1\TenantInvoiceController;
+use App\Http\Controllers\Api\V1\TenantUtilityController;
 use App\Http\Controllers\Api\V1\UtilityController;
 use App\Models\Room;
 use Illuminate\Support\Facades\Route;
@@ -190,7 +191,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     // ── Route OCR (Quét CCCD) ────────────────────────────────
     Route::post('ocr/scan-id-card', [OcrController::class, 'scanIdCard'])->name('ocr.scan');
-
+    // ── Route OCR (Quét hóa đơn điện/nước) ────────────────────────────────
+    Route::post('ocr/scan-meter', [OcrController::class, 'scanMeter'])->name('ocr.scan-meter');
+    
     // ── Utilities (Quản lý chỉ số Điện / Nước) ─────────────────────────────────
     Route::apiResource('utilities', UtilityController::class);
 
@@ -244,6 +247,13 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/{id}/payment-status', [TenantInvoiceController::class, 'paymentStatus']);
 
         Route::post('/{id}/submit-proof', [TenantInvoiceController::class, 'submitProof']);
+    });
+
+    Route::prefix('tenant/utilities')->name('tenant.utilities.')->group(function () {
+        Route::get('/', [TenantUtilityController::class, 'index']);
+        Route::get('/current-readings', [TenantUtilityController::class, 'currentReadings']);
+        Route::post('/submit-batch', [TenantUtilityController::class, 'submitBatch']);
+        Route::get('/{id}', [TenantUtilityController::class, 'show']);
     });
 });
 
