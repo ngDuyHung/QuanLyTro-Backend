@@ -232,7 +232,7 @@ class SePayTransactionController extends Controller
             ], 404);
         }
 
-        $sepayConfig = \App\Models\SepayConfig::forUser($bankAccount->user_id);
+        $sepayConfig = \App\Models\SepayConfig::forUser((int) $bankAccount->user_id);
 
         // Dùng trim() để loại bỏ khoảng trắng ẩn nếu vô tình nhập dư trong DB
         $savedKey = trim((string) $sepayConfig->apiToken());
