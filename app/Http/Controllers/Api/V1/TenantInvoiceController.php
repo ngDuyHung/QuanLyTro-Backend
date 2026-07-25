@@ -121,4 +121,26 @@ class TenantInvoiceController extends Controller
             ]
         ]);
     }
+
+    public function submitProof(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:1'],
+            'transaction_date' => ['required', 'date'],
+            'proof_image' => ['required', 'image', 'mimes:jpeg,png,jpg', 'max:5120'], // Max 5MB
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $invoice = $this->tenantInvoiceService->submitProof(
+            invoiceId: $id,
+            userId: $request->user()->id,
+            data: $data,
+            file: $request->file('proof_image')
+        );
+
+        return response()->json([
+            'message' => 'Đã gửi minh chứng thành công. Đang chờ duyệt.',
+            'data' => new InvoiceResource($invoice)
+        ]);
+    }
 }

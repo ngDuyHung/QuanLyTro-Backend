@@ -155,9 +155,9 @@ return new class extends Migration
              |
              */
             $table->enum('direction', [
-                    'income',
-                    'expense',
-                ])
+                'income',
+                'expense',
+            ])
                 ->comment('Chiều dòng tiền: income là tiền vào, expense là tiền ra');
 
             /*
@@ -197,17 +197,17 @@ return new class extends Migration
              |
              */
             $table->enum('category', [
-                    'invoice_payment',
-                    'holding_deposit',
-                    'security_deposit',
-                    'deposit_forfeit',
-                    'refund_security_deposit',
-                    'damage_fee',
-                    'repair',
-                    'operation',
-                    'other_income',
-                    'other_expense',
-                ])
+                'invoice_payment',
+                'holding_deposit',
+                'security_deposit',
+                'deposit_forfeit',
+                'refund_security_deposit',
+                'damage_fee',
+                'repair',
+                'operation',
+                'other_income',
+                'other_expense',
+            ])
                 ->comment('Loại nghiệp vụ thu/chi');
 
             /*
@@ -236,12 +236,12 @@ return new class extends Migration
              |
              */
             $table->enum('accounting_type', [
-                    'revenue',
-                    'liability_in',
-                    'liability_out',
-                    'expense',
-                    'receivable_adjustment',
-                ])
+                'revenue',
+                'liability_in',
+                'liability_out',
+                'expense',
+                'receivable_adjustment',
+            ])
                 ->comment('Bản chất kế toán của khoản thu/chi');
 
             /*
@@ -277,14 +277,16 @@ return new class extends Migration
              |
              */
             $table->enum('method', [
-                    'cash',
-                    'bank_transfer',
-                    'sepay',
-                    'other',
-                ])
+                'cash',
+                'bank_transfer',
+                'sepay',
+                'other',
+            ])
                 ->default('cash')
                 ->comment('Phương thức thu/chi: cash/bank_transfer/sepay/other');
 
+            $table->string('proof_image', 500)->nullable()
+                ->comment('Đường dẫn ảnh minh chứng chuyển khoản');
             /*
              |--------------------------------------------------------------------------
              | Trạng thái giao dịch
@@ -305,11 +307,11 @@ return new class extends Migration
              |
              */
             $table->enum('status', [
-                    'pending',
-                    'confirmed',
-                    'cancelled',
-                    'refunded',
-                ])
+                'pending',
+                'confirmed',
+                'cancelled',
+                'refunded',
+            ])
                 ->default('confirmed')
                 ->index()
                 ->comment('Trạng thái giao dịch thu/chi');

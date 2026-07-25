@@ -181,6 +181,9 @@ class InvoiceResource extends JsonResource
                             'category' => $allocation->financialTransaction->category,
                             'amount' => (int) $allocation->financialTransaction->amount,
                             'method' => $allocation->financialTransaction->method,
+                            'proof_image' => $allocation->financialTransaction->proof_image
+                            ? asset('storage/' . ltrim($allocation->financialTransaction->proof_image, '/'))
+                            : null,
                             'status' => $allocation->financialTransaction->status,
                             'transaction_date' => $allocation->financialTransaction->transaction_date?->toDateTimeString(),
                         ]

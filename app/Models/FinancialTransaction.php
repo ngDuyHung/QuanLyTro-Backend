@@ -33,6 +33,7 @@ class FinancialTransaction extends Model
 
         'amount',
         'method',
+        'proof_image',
         'status',
 
         'transaction_date',
@@ -59,6 +60,7 @@ class FinancialTransaction extends Model
         'sepay_transaction_id' => 'integer',
 
         'amount' => 'integer',
+        'proof_image' => 'string',
 
         'transaction_date' => 'datetime',
         'confirmed_at' => 'datetime',

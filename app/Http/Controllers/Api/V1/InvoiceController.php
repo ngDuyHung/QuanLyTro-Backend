@@ -42,6 +42,7 @@ class InvoiceController extends Controller
                 'property:id,user_id,name',
                 'items',
                 'meterReadings',
+                'allocations.financialTransaction',
             ])
             ->whereHas('lease.room.property', function ($query) use ($request): void {
                 $query->where('user_id', $request->user()->id);

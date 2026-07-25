@@ -46,6 +46,9 @@ class FinancialTransactionResource extends JsonResource
 
             'transfer_content' => $this->transfer_content,
             'bank_transaction_code' => $this->bank_transaction_code,
+            'proof_image' => $this->proof_image
+            ? asset('storage/' . ltrim($this->proof_image, '/'))
+            : null,
 
             'confirmed_at' => $this->confirmed_at?->toDateTimeString(),
             'cancelled_at' => $this->cancelled_at?->toDateTimeString(),
@@ -54,17 +57,17 @@ class FinancialTransactionResource extends JsonResource
             'description' => $this->description,
             'note' => $this->note,
 
-            'property' => $this->whenLoaded('property', fn () => $this->property ? [
+            'property' => $this->whenLoaded('property', fn() => $this->property ? [
                 'id' => $this->property->id,
                 'name' => $this->property->name,
             ] : null),
 
-            'room' => $this->whenLoaded('room', fn () => $this->room ? [
+            'room' => $this->whenLoaded('room', fn() => $this->room ? [
                 'id' => $this->room->id,
                 'name' => $this->room->name,
             ] : null),
 
-            'lease' => $this->whenLoaded('lease', fn () => $this->lease ? [
+            'lease' => $this->whenLoaded('lease', fn() => $this->lease ? [
                 'id' => $this->lease->id,
                 'room_id' => $this->lease->room_id,
                 'tenant_id' => $this->lease->tenant_id,
@@ -73,13 +76,13 @@ class FinancialTransactionResource extends JsonResource
                     : $this->lease->status,
             ] : null),
 
-            'tenant' => $this->whenLoaded('tenant', fn () => $this->tenant ? [
+            'tenant' => $this->whenLoaded('tenant', fn() => $this->tenant ? [
                 'id' => $this->tenant->id,
                 'full_name' => $this->tenant->full_name,
                 'phone' => $this->tenant->phone,
             ] : null),
 
-            'bank_account' => $this->whenLoaded('bankAccount', fn () => $this->bankAccount ? [
+            'bank_account' => $this->whenLoaded('bankAccount', fn() => $this->bankAccount ? [
                 'id' => $this->bankAccount->id,
                 'account_name' => $this->bankAccount->account_name,
                 'account_number' => $this->bankAccount->account_number,
@@ -87,7 +90,7 @@ class FinancialTransactionResource extends JsonResource
                 'bank_code' => $this->bankAccount->bank_code,
             ] : null),
 
-            'sepay_transaction' => $this->whenLoaded('sepayTransaction', fn () => $this->sepayTransaction ? [
+            'sepay_transaction' => $this->whenLoaded('sepayTransaction', fn() => $this->sepayTransaction ? [
                 'id' => $this->sepayTransaction->id,
                 'provider_transaction_id' => $this->sepayTransaction->provider_transaction_id,
                 'reference_code' => $this->sepayTransaction->reference_code,
@@ -97,7 +100,7 @@ class FinancialTransactionResource extends JsonResource
             ] : null),
 
             'allocations' => $this->whenLoaded('allocations', function () {
-                return $this->allocations->map(fn ($allocation): array => [
+                return $this->allocations->map(fn($allocation): array => [
                     'id' => $allocation->id,
                     'invoice_id' => $allocation->invoice_id,
                     'allocated_amount' => (int) $allocation->allocated_amount,

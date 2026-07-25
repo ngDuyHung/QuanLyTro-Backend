@@ -161,6 +161,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('financial-transactions/{id}/cancel', [FinancialTransactionController::class, 'cancel'])
         ->name('financial-transactions.cancel');
 
+    // Route cho phép chủ trọ duyệt giao dịch thu tiền từ khách thuê (chỉ áp dụng cho giao dịch PENDING)
+    Route::post('financial-transactions/{id}/approve', [FinancialTransactionController::class, 'approve'])
+        ->name('financial-transactions.approve');
+
     // Ghi nhận thanh toán hóa đơn
     Route::post('invoices/{id}/receive-payment', [FinancialTransactionController::class, 'receiveInvoicePayment'])
         ->name('invoices.receive-payment');
@@ -238,6 +242,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/{id}/preview-html', [TenantInvoiceController::class, 'previewHtml']);
 
         Route::get('/{id}/payment-status', [TenantInvoiceController::class, 'paymentStatus']);
+
+        Route::post('/{id}/submit-proof', [TenantInvoiceController::class, 'submitProof']);
     });
 });
 

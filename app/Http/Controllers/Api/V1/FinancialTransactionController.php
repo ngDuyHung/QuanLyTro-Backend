@@ -11,10 +11,14 @@ use App\Http\Requests\FinancialTransaction\ReceiveInvoicePaymentRequest;
 use App\Http\Requests\FinancialTransaction\StoreFinancialTransactionRequest;
 use App\Http\Resources\FinancialTransaction\FinancialTransactionResource;
 use App\Models\FinancialTransaction;
+use App\Models\FinancialTransactionAllocation;
+use App\Models\Invoice;
 use App\Models\Property;
 use App\Services\FinancialTransactionService;
+use App\Services\InvoiceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class FinancialTransactionController extends Controller
 {
@@ -177,9 +181,8 @@ class FinancialTransactionController extends Controller
     /**
      * Hủy giao dịch thu chi.
      *
-     * Tạm thời chỉ cho hủy giao dịch chưa cấn vào hóa đơn.
-     * Nếu đã cấn tiền vào hóa đơn thì nên làm service điều chỉnh riêng,
-     * tránh sai công nợ.
+     * Chỉ áp dụng cho giao dịch PENDING hoặc CONFIRMED mà chưa cấn trừ vào hóa đơn.
+     * Nếu CONFIRMED mà đã cấn trừ vào hóa đơn, phải tạo giao dịch điều chỉnh (adjustment) thay vì hủy trực tiếp.
      */
     public function cancel(CancelFinancialTransactionRequest $request, int $id): JsonResponse
     {
@@ -196,15 +199,24 @@ class FinancialTransactionController extends Controller
             throw new BusinessException('Giao dịch này đã bị hủy trước đó.');
         }
 
-        if ($transaction->allocations()->exists()) {
+        // CHỈ CHẶN NẾU GIAO DỊCH ĐÃ 'CONFIRMED' MÀ CÓ ALLOCATIONS
+        if ($transaction->status === 'confirmed' && $transaction->allocations()->exists()) {
             throw new BusinessException('Không thể hủy trực tiếp giao dịch đã cấn vào hóa đơn. Vui lòng tạo giao dịch điều chỉnh.');
         }
 
-        $transaction->update([
-            'status' => 'cancelled',
-            'cancelled_at' => now(),
-            'cancel_reason' => $data['cancel_reason'],
-        ]);
+        DB::transaction(function () use ($transaction, $data) {
+            // NẾU LÀ PENDING: Xóa bỏ dòng cấn trừ (allocation) đi trước khi hủy
+            if ($transaction->status === 'pending') {
+                $transaction->allocations()->delete();
+            }
+
+            // Tiến hành hủy giao dịch
+            $transaction->update([
+                'status' => 'cancelled',
+                'cancelled_at' => now(),
+                'cancel_reason' => $data['cancel_reason'],
+            ]);
+        });
 
         return (new FinancialTransactionResource($transaction->fresh([
             'property',
@@ -215,6 +227,39 @@ class FinancialTransactionController extends Controller
             'sepayTransaction',
             'allocations.invoice',
         ])))->response();
+    }
+
+    public function approve(Request $request, int $id, InvoiceService $invoiceService): JsonResponse
+    {
+        // 1. Check quyền sở hữu qua property
+        $transaction = FinancialTransaction::whereHas('property', function ($q) use ($request) {
+            $q->where('user_id', $request->user()->id);
+        })->findOrFail($id);
+
+        if ($transaction->status !== 'pending') {
+            throw new BusinessException('Chỉ có thể duyệt giao dịch đang ở trạng thái chờ.');
+        }
+
+        DB::transaction(function () use ($transaction, $invoiceService) {
+            // 2. Đổi trạng thái thành confirmed
+            $transaction->update([
+                'status' => 'confirmed',
+                'confirmed_at' => now(),
+            ]);
+
+            // 3. Tìm hóa đơn đang được cấn trừ bởi giao dịch này
+            $allocation = FinancialTransactionAllocation::where('financial_transaction_id', $transaction->id)->first();
+
+            if ($allocation) {
+                $invoice = Invoice::find($allocation->invoice_id);
+                if ($invoice) {
+                    // 4. GỌI LÕI GẠCH NỢ: Hàm này sẽ tính lại tổng tiền confirmed và cập nhật trạng thái hóa đơn
+                    $invoiceService->refreshPaymentStatus($invoice);
+                }
+            }
+        });
+
+        return response()->json(['message' => 'Đã duyệt giao dịch thành công.']);
     }
 
     /**
