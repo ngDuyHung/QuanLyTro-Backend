@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\V1\OcrController;
 use App\Http\Controllers\Api\V1\RoomReservationController;
 use App\Http\Controllers\Api\V1\SepayConfigController;
 use App\Http\Controllers\Api\V1\SettingController;
+use App\Http\Controllers\Api\V1\TenantInvoiceController;
 use App\Http\Controllers\Api\V1\UtilityController;
 use App\Models\Room;
 use Illuminate\Support\Facades\Route;
@@ -223,6 +224,21 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     // ── Dashboard (Thống kê) ───────────────────────────────────────────────
     Route::get('dashboard', [DashboardController::class, 'index']);
+
+
+    // ── Tenant Dashboard ───────────────────────────────────────────────────
+    Route::get('tenant/dashboard', [DashboardController::class, 'tenantIndex'])->name('tenant.dashboard');
+
+    Route::prefix('tenant/invoices')->name('tenant.invoices.')->group(function () {
+        Route::get('/', [TenantInvoiceController::class, 'index']);
+        Route::get('/{id}', [TenantInvoiceController::class, 'show']);
+        // API lấy thông tin ngân hàng của chủ trọ để hiển thị mã QR
+        Route::get('/{id}/payment-config', [TenantInvoiceController::class, 'paymentConfig']);
+        // API lấy bản in HTML hóa đơn
+        Route::get('/{id}/preview-html', [TenantInvoiceController::class, 'previewHtml']);
+
+        Route::get('/{id}/payment-status', [TenantInvoiceController::class, 'paymentStatus']);
+    });
 });
 
 // 1. THÊM ROUTE WEBHOOK VÀO PHẦN PUBLIC (Nằm ngoài auth:sanctum)

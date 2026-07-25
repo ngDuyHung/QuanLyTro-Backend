@@ -279,4 +279,6 @@ class InvoiceController extends Controller
             ->header('Content-Type', 'image/png')
             ->header('Content-Disposition', 'attachment; filename="Hoa_don_ban_in_' . $id . '.png"');
     }
+
+    
 }

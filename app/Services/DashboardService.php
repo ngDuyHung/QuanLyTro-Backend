@@ -8,8 +8,11 @@ use App\Models\FinancialTransaction;
 use App\Models\Incident;
 use App\Models\Invoice;
 use App\Models\Lease;
+use App\Models\MeterReading;
+use App\Models\Notification;
 use App\Models\Property;
 use App\Models\Room;
+use App\Models\Tenant;
 use Illuminate\Support\Carbon;
 
 class DashboardService
@@ -289,5 +292,98 @@ class DashboardService
                 'days_left' => max(0, $daysLeft), // Đảm bảo không bị số âm
             ];
         })->toArray();
+    }
+
+
+    /**
+     * Lấy toàn bộ dữ liệu tổng quan cho Dashboard của Khách thuê
+     */
+    public function getTenantDashboardData(int $userId): array
+    {
+        // 1. Tìm thông tin khách thuê từ tài khoản đăng nhập
+        $tenant = Tenant::where('user_id', $userId)->first();
+
+        if (!$tenant) {
+            return ['error' => 'Tài khoản của bạn chưa được liên kết với hồ sơ khách thuê nào.'];
+        }
+
+        // 2. Lấy hợp đồng đang hoạt động kèm thông tin Phòng và Khu nhà
+        $activeLease = Lease::with(['room.property'])
+            ->where('tenant_id', $tenant->id)
+            ->where('status', 'active')
+            ->first();
+
+        if (!$activeLease) {
+            return ['error' => 'Bạn hiện không có hợp đồng thuê phòng nào đang hoạt động.'];
+        }
+
+        $roomId = $activeLease->room_id;
+        $propertyId = $activeLease->room->property_id;
+
+        // 3. Truy vấn các dữ liệu liên quan
+
+        // A. Hóa đơn: Lấy hóa đơn nợ/chưa thanh toán
+        $unpaidInvoices = Invoice::where('lease_id', $activeLease->id)
+            ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+            ->orderBy('due_date', 'asc')
+            ->get();
+
+        // A1. Lấy 5 hóa đơn đã phát hành gần nhất (có thể đã thanh toán hoặc chưa)
+        $recentInvoices = Invoice::where('lease_id', $activeLease->id)
+            ->whereIn('status', ['issued', 'partially_paid', 'overdue', 'paid'])
+            ->orderBy('issue_date', 'desc')
+            ->limit(5)
+            ->get();
+
+        // B. Điện nước: Lấy 2 bản ghi chỉ số gần nhất (thường là 1 điện, 1 nước của kỳ mới nhất)
+        $recentUtilities = MeterReading::where('lease_id', $activeLease->id)
+            ->orderBy('reading_date', 'desc')
+            ->limit(4)
+            ->get();
+
+        // C. Sự cố: Các sự cố đang mở hoặc vừa xử lý của khách thuê này
+        $recentIncidents = Incident::where('reported_by_tenant_id', $tenant->id)
+            ->orderBy('created_at', 'desc')
+            ->limit(5)
+            ->get();
+
+        // D. Thông báo: Lấy thông báo mới nhất gửi cho user này (hoặc thông báo chung của khu nhà/phòng)
+        $notifications = Notification::where(function ($query) use ($userId, $propertyId, $roomId) {
+            $query->where('user_id', $userId) // Thông báo cá nhân
+                ->orWhere(function ($q) use ($propertyId) { // Thông báo toàn khu
+                    $q->where('target_type', 'property')
+                        ->where('target_id', $propertyId);
+                })
+                ->orWhere(function ($q) use ($roomId) { // Thông báo toàn phòng
+                    $q->where('target_type', 'room')
+                        ->where('target_id', $roomId);
+                });
+        })
+            ->orderBy('created_at', 'desc')
+            ->limit(5)
+            ->get();
+
+        // 4. Trả về cấu trúc JSON phân nhóm rõ ràng
+        return [
+            'room_info' => [
+                'property_name' => $activeLease->room->property->name,
+                'room_name'     => $activeLease->room->name,
+                'address'       => $activeLease->room->property->address,
+                'room_price'    => $activeLease->room_price,
+                'floor_number' => $activeLease->room->floor_number,
+            ],
+            'lease_info' => [
+                'id'         => $activeLease->id,
+                'start_date' => $activeLease->start_date,
+                'end_date'   => $activeLease->end_date,
+                'deposit'    => $activeLease->deposit,
+                'occupants_count' => $activeLease->occupants_count,
+            ],
+            'unpaid_invoices' => $unpaidInvoices,
+            'recent_invoices' => $recentInvoices,
+            'recent_utilities' => $recentUtilities,
+            'recent_incidents' => $recentIncidents,
+            'notifications'    => $notifications,
+        ];
     }
 }
