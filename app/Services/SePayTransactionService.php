@@ -246,7 +246,7 @@ class SePayTransactionService
             $landlordId = $bankAccount->user_id;
 
             // 2. Lấy cấu hình của chủ trọ đó (Tiền tố mã Hóa đơn & Check duyệt tay)
-            $sepayConfig = \App\Models\SepayConfig::forUser($landlordId);
+            $sepayConfig = \App\Models\SepayConfig::forUser((int) $landlordId);
             $patternPrefix = $sepayConfig->matchPattern();
             $isAutoApprove = $sepayConfig->autoConfirm();
 
