@@ -96,7 +96,7 @@ class TenantInvoiceController extends Controller
 
         // Biên dịch HTML dựa trên setting của chủ trọ
         $landlordId = $invoice->property->user_id;
-        $html = $settingService->compileInvoiceHtml($invoice->id, $landlordId);
+        $html = $settingService->compileInvoiceHtml($invoice->id, (int) $landlordId);
 
         return response()->json(['html' => $html]);
     }

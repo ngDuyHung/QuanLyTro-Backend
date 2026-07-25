@@ -58,7 +58,7 @@ class TenantLeaseController extends Controller
         );
 
         // 2. Tìm ID của chủ trọ (thông qua property) để lấy đúng cấu hình mẫu hợp đồng của chủ trọ đó
-        $landlordId = $lease->room->property->user_id;
+        $landlordId = (int) $lease->room->property->user_id;
 
         // 3. Biên dịch HTML và trả về
         $html = $settingService->compileLeaseHtml($lease->id, $landlordId);
