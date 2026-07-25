@@ -269,17 +269,17 @@ class InvoiceController extends Controller
     /**
      * Xuất ảnh bản in PDF Hóa đơn (Trả về file PNG)
      */
-    public function exportInvoicePdfImage(Request $request, $id, SettingService $settingService)
-    {
-        $userId = $request->user()->id;
+    // public function exportInvoicePdfImage(Request $request, $id, SettingService $settingService)
+    // {
+    //     $userId = $request->user()->id;
 
-        $base64Image = $settingService->generateInvoicePdfImage((int) $id, $userId);
-        $imageCode = base64_decode($base64Image);
+    //     $base64Image = $settingService->generateInvoicePdfImage((int) $id, $userId);
+    //     $imageCode = base64_decode($base64Image);
 
-        return response($imageCode)
-            ->header('Content-Type', 'image/png')
-            ->header('Content-Disposition', 'attachment; filename="Hoa_don_ban_in_' . $id . '.png"');
-    }
+    //     return response($imageCode)
+    //         ->header('Content-Type', 'image/png')
+    //         ->header('Content-Disposition', 'attachment; filename="Hoa_don_ban_in_' . $id . '.png"');
+    // }
 
     
 }

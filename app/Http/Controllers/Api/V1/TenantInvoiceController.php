@@ -71,7 +71,7 @@ class TenantInvoiceController extends Controller
             ->get();
 
         // 3. Lấy cấu hình SePay của chủ trọ (Sửa lại cách gọi tại đây)
-        $sepayConfig = SepayConfig::forUser($landlordId)->toArray();
+        $sepayConfig = SepayConfig::forUser((int)$landlordId)->toArray();
 
         return response()->json([
             'success' => true,
