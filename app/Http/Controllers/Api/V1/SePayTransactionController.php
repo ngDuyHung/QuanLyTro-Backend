@@ -207,16 +207,23 @@ class SePayTransactionController extends Controller
         // 1. Nhận payload từ SePay
         $payload = $request->all();
         $accountNumber = $payload['accountNumber'] ?? null;
+        $subAccount = $payload['subAccount'] ?? null; // Lấy thêm subAccount từ payload
 
-        if (!$accountNumber) {
+        if (!$accountNumber && !$subAccount) {
             return response()->json([
                 'success' => false,
-                'message' => 'Thiếu thông tin số tài khoản (accountNumber) từ SePay.'
+                'message' => 'Thiếu thông tin số tài khoản từ SePay.'
             ], 400);
         }
 
         // 2. Tìm tài khoản ngân hàng để xác định user_id của chủ trọ
-        $bankAccount = \App\Models\BankAccount::where('account_number', $accountNumber)->first();
+        // Ưu tiên khớp với subAccount (tài khoản ảo) trước, nếu không khớp thì tìm bằng accountNumber
+        $bankAccount = \App\Models\BankAccount::query()
+            ->when($subAccount, function ($query) use ($subAccount) {
+                $query->where('account_number', $subAccount);
+            })
+            ->orWhere('account_number', $accountNumber)
+            ->first();
 
         if (!$bankAccount) {
             return response()->json([
@@ -226,10 +233,10 @@ class SePayTransactionController extends Controller
         }
 
         $sepayConfig = \App\Models\SepayConfig::forUser($bankAccount->user_id);
-        
+
         // Dùng trim() để loại bỏ khoảng trắng ẩn nếu vô tình nhập dư trong DB
-        $savedKey = trim((string) $sepayConfig->apiToken()); 
-        
+        $savedKey = trim((string) $sepayConfig->apiToken());
+
         if (empty($savedKey)) {
             return response()->json([
                 'success' => false,
