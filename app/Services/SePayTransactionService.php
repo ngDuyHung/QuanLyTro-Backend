@@ -55,7 +55,10 @@ class SePayTransactionService
                 }
             }
 
-            $bankAccount = $this->findBankAccount($data['accountNumber'] ?? null);
+            $bankAccount = $this->findBankAccount(
+                $data['accountNumber'] ?? null,
+                $data['subAccount'] ?? null
+            );
 
             $transaction = SePayTransaction::create([
                 'bank_account_id' => $bankAccount?->id,
@@ -170,18 +173,22 @@ class SePayTransactionService
     }
 
     /**
-     * Tìm tài khoản ngân hàng theo accountNumber.
+     * Tìm tài khoản ngân hàng theo subAccount (ưu tiên) hoặc accountNumber.
      */
-    private function findBankAccount(mixed $accountNumber): ?BankAccount
+    private function findBankAccount(mixed $accountNumber, mixed $subAccount = null): ?BankAccount
     {
         $accountNumber = $this->stringOrNull($accountNumber);
+        $subAccount = $this->stringOrNull($subAccount);
 
-        if (!$accountNumber) {
+        if (!$accountNumber && !$subAccount) {
             return null;
         }
 
         return BankAccount::query()
-            ->where('account_number', $accountNumber)
+            ->when($subAccount, function ($query) use ($subAccount) {
+                $query->where('account_number', $subAccount);
+            })
+            ->orWhere('account_number', $accountNumber)
             ->first();
     }
 
