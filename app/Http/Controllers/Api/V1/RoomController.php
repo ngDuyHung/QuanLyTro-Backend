@@ -322,7 +322,19 @@ class RoomController extends Controller
         if ($room->status !== RoomStatus::Available) {
             throw new BusinessException('Chỉ có thể xóa phòng đang ở trạng thái trống.');
         }
+        // Kiểm tra xem phòng đã từng có hợp đồng nào chưa
+        if ($room->leases()->exists()) {
+            throw new BusinessException('Không thể xóa phòng đã hoặc đang có lịch sử hợp đồng thuê. Bạn chỉ có thể cập nhật trạng thái hoặc ẩn phòng này.');
+        }
 
+        // Thêm kiểm tra phòng có reservation chưa (Cọc giữ chỗ)
+        if ($room->reservations()->exists()) {
+            throw new BusinessException('Không thể xóa phòng đang có lịch sử cọc giữ chỗ.');
+        }
+        // Kiểm tra lịch sử cư dân
+        if ($room->residents()->exists()) {
+            throw new BusinessException('Không thể xóa phòng đã từng có thông tin cư dân lưu trú.');
+        }
         $pathsToDeleteAfterCommit = [];
 
         try {
