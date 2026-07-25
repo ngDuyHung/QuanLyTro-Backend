@@ -477,48 +477,48 @@ class SettingService
     /**
      * Dùng Imagick để chuyển trang 1 của file PDF (DomPDF) thành ảnh PNG
      */
-    public function generateInvoicePdfImage(int $invoiceId, int $userId)
-    {
-        try {
-            // 1. Khởi tạo và lấy file PDF từ hàm đã có sẵn
-            $pdf = $this->generateInvoicePdf($invoiceId, $userId);
-            $pdfData = $pdf->output(); // Lấy raw binary của PDF
+    // public function generateInvoicePdfImage(int $invoiceId, int $userId)
+    // {
+    //     try {
+    //         // 1. Khởi tạo và lấy file PDF từ hàm đã có sẵn
+    //         $pdf = $this->generateInvoicePdf($invoiceId, $userId);
+    //         $pdfData = $pdf->output(); // Lấy raw binary của PDF
 
-            // 2. Khởi tạo Imagick để xử lý ảnh
-            $im = new \Imagick();
+    //         // 2. Khởi tạo Imagick để xử lý ảnh
+    //         $im = new \Imagick();
 
-            // BẮT BUỘC: Set độ phân giải (DPI) TRƯỚC khi đọc ảnh để ảnh sau khi xuất ra được nét (như HD)
-            $im->setResolution(300, 300);
+    //         // BẮT BUỘC: Set độ phân giải (DPI) TRƯỚC khi đọc ảnh để ảnh sau khi xuất ra được nét (như HD)
+    //         $im->setResolution(300, 300);
 
-            // Đọc nội dung PDF từ chuỗi binary
-            $im->readImageBlob($pdfData);
+    //         // Đọc nội dung PDF từ chuỗi binary
+    //         $im->readImageBlob($pdfData);
 
-            // Chọn trang đầu tiên của hóa đơn (Index 0)
-            $im->setIteratorIndex(0);
+    //         // Chọn trang đầu tiên của hóa đơn (Index 0)
+    //         $im->setIteratorIndex(0);
 
-            // Cài đặt định dạng xuất ra là PNG
-            $im->setImageFormat('png');
+    //         // Cài đặt định dạng xuất ra là PNG
+    //         $im->setImageFormat('png');
 
-            // XỬ LÝ NỀN TRẮNG: Rất quan trọng vì PDF mặc định không có màu nền. 
-            // Nếu không có đoạn này, ảnh xuất ra có thể bị nền đen hoặc trong suốt.
-            $im->setImageBackgroundColor('white');
-            $im->setImageAlphaChannel(\Imagick::ALPHACHANNEL_REMOVE);
-            $im->mergeImageLayers(\Imagick::LAYERMETHOD_FLATTEN);
+    //         // XỬ LÝ NỀN TRẮNG: Rất quan trọng vì PDF mặc định không có màu nền. 
+    //         // Nếu không có đoạn này, ảnh xuất ra có thể bị nền đen hoặc trong suốt.
+    //         $im->setImageBackgroundColor('white');
+    //         $im->setImageAlphaChannel(\Imagick::ALPHACHANNEL_REMOVE);
+    //         $im->mergeImageLayers(\Imagick::LAYERMETHOD_FLATTEN);
 
-            // Lấy dữ liệu ảnh
-            $imageBlob = $im->getImageBlob();
+    //         // Lấy dữ liệu ảnh
+    //         $imageBlob = $im->getImageBlob();
 
-            // Giải phóng bộ nhớ RAM ngay lập tức
-            $im->clear();
-            $im->destroy();
+    //         // Giải phóng bộ nhớ RAM ngay lập tức
+    //         $im->clear();
+    //         $im->destroy();
 
-            // Encode sang Base64 để tương thích 100% với InvoiceController hiện tại của bạn
-            return base64_encode($imageBlob);
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Lỗi xuất ảnh bằng Imagick: ' . $e->getMessage());
-            throw new \App\Exceptions\Domain\BusinessException(
-                'Lỗi hệ thống: Không thể xuất ảnh hóa đơn. Máy chủ có thể không hỗ trợ Imagick/Ghostscript.'
-            );
-        }
-    }
+    //         // Encode sang Base64 để tương thích 100% với InvoiceController hiện tại của bạn
+    //         return base64_encode($imageBlob);
+    //     } catch (\Exception $e) {
+    //         \Illuminate\Support\Facades\Log::error('Lỗi xuất ảnh bằng Imagick: ' . $e->getMessage());
+    //         throw new \App\Exceptions\Domain\BusinessException(
+    //             'Lỗi hệ thống: Không thể xuất ảnh hóa đơn. Máy chủ có thể không hỗ trợ Imagick/Ghostscript.'
+    //         );
+    //     }
+    // }
 }

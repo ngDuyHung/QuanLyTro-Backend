@@ -565,7 +565,7 @@ class InvoiceService
     {
         do {
             $code = sprintf(
-                'HD-%s-R%s-%s',
+                'HD%sR%s%s',
                 now()->format('Ym'),
                 $roomId,
                 Str::upper(Str::random(4))
