@@ -203,8 +203,54 @@ class SePayTransactionController extends Controller
      */
     public function webhook(Request $request, \App\Services\SePayTransactionService $sePayTransactionService): JsonResponse
     {
-        // Nhận payload từ SePay
+
+        // 1. Nhận payload từ SePay
         $payload = $request->all();
+        $accountNumber = $payload['accountNumber'] ?? null;
+
+        if (!$accountNumber) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Thiếu thông tin số tài khoản (accountNumber) từ SePay.'
+            ], 400);
+        }
+
+        // 2. Tìm tài khoản ngân hàng để xác định user_id của chủ trọ
+        $bankAccount = \App\Models\BankAccount::where('account_number', $accountNumber)->first();
+
+        if (!$bankAccount) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Không tìm thấy tài khoản ngân hàng trên hệ thống.'
+            ], 404);
+        }
+
+        $sepayConfig = \App\Models\SepayConfig::forUser($bankAccount->user_id);
+        
+        // Dùng trim() để loại bỏ khoảng trắng ẩn nếu vô tình nhập dư trong DB
+        $savedKey = trim((string) $sepayConfig->apiToken()); 
+        
+        if (empty($savedKey)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Chủ trọ chưa cấu hình SePay API Key.'
+            ], 400);
+        }
+
+        $expectedToken = 'Apikey ' . $savedKey;
+        $authHeader = $request->header('Authorization');
+
+        // BẬT LOG ĐỂ KIỂM TRA
+        // \Illuminate\Support\Facades\Log::info('--- BẮT ĐẦU TEST WEBHOOK ---');
+        // \Illuminate\Support\Facades\Log::info('1. Header Postman gửi lên: [' . $authHeader . ']');
+        // \Illuminate\Support\Facades\Log::info('2. Key lấy từ DB ghép lại  : [' . $expectedToken . ']');
+
+        if (!$authHeader || $authHeader !== $expectedToken) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Invalid API Key.'
+            ], 401);
+        }
 
         // Đẩy vào Service xử lý (Tự động tìm chủ trọ, đối soát...)
         $sePayTransactionService->handleWebhook($payload);
