@@ -23,8 +23,12 @@ use App\Http\Controllers\Api\V1\OcrController;
 use App\Http\Controllers\Api\V1\RoomReservationController;
 use App\Http\Controllers\Api\V1\SepayConfigController;
 use App\Http\Controllers\Api\V1\SettingController;
+use App\Http\Controllers\Api\V1\TenantIncidentController;
 use App\Http\Controllers\Api\V1\TenantInvoiceController;
 use App\Http\Controllers\Api\V1\TenantLeaseController;
+use App\Http\Controllers\Api\V1\TenantMemberController;
+use App\Http\Controllers\Api\V1\TenantNotificationController;
+use App\Http\Controllers\Api\V1\TenantProfileController;
 use App\Http\Controllers\Api\V1\TenantUtilityController;
 use App\Http\Controllers\Api\V1\UtilityController;
 use App\Models\Room;
@@ -261,6 +265,29 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/', [TenantLeaseController::class, 'index']);
         Route::get('/{id}', [TenantLeaseController::class, 'show']);
         Route::get('/{id}/preview-html', [TenantLeaseController::class, 'previewHtml']);
+    });
+
+    Route::prefix('tenant/incidents')->name('tenant.incidents.')->group(function () {
+        Route::get('/', [TenantIncidentController::class, 'index']);
+        Route::post('/', [TenantIncidentController::class, 'store']);
+        Route::get('/{id}', [TenantIncidentController::class, 'show']);
+        Route::put('/{id}', [TenantIncidentController::class, 'update']);
+        Route::patch('/{id}/cancel', [TenantIncidentController::class, 'cancel']);
+    });
+
+    Route::prefix('tenant/notifications')->name('tenant.notifications.')->group(function () {
+        Route::get('/', [TenantNotificationController::class, 'index']);
+        Route::get('/{id}', [TenantNotificationController::class, 'show']);
+    });
+
+    Route::get('tenant/profile', [TenantProfileController::class, 'show'])->name('tenant.profile');
+
+    Route::prefix('tenant/members')->name('tenant.members.')->group(function () {
+        Route::get('/', [TenantMemberController::class, 'index']);
+        Route::post('/', [TenantMemberController::class, 'store']);
+        // Sử dụng POST với _method=PUT hoặc PATCH từ phía Frontend để hỗ trợ upload File
+        Route::post('/{member}', [TenantMemberController::class, 'update']);
+        Route::delete('/{member}', [TenantMemberController::class, 'destroy']);
     });
 });
 
