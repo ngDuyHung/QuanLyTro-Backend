@@ -12,6 +12,7 @@ use App\Models\MeterReading;
 use App\Models\Notification;
 use App\Models\Property;
 use App\Models\Room;
+use App\Models\RoomImage;
 use App\Models\Tenant;
 use Illuminate\Support\Carbon;
 
@@ -363,6 +364,12 @@ class DashboardService
             ->limit(5)
             ->get();
 
+        // Lấy ảnh đại diện của phòng (is_cover = 1), nếu không có thì lấy ảnh đầu tiên
+        $coverImage = RoomImage::where('room_id', $roomId)
+            ->orderByDesc('is_cover')
+            ->orderBy('sort_order')
+            ->first();
+
         // 4. Trả về cấu trúc JSON phân nhóm rõ ràng
         return [
             'room_info' => [
@@ -371,6 +378,7 @@ class DashboardService
                 'address'       => $activeLease->room->property->address,
                 'room_price'    => $activeLease->room_price,
                 'floor_number' => $activeLease->room->floor_number,
+                'img_url' => $coverImage?->image_url ? asset('storage/' . ltrim($coverImage->image_url)) : null,
             ],
             'lease_info' => [
                 'id'         => $activeLease->id,
