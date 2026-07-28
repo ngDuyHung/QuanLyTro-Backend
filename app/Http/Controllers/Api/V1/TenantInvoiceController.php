@@ -26,7 +26,7 @@ class TenantInvoiceController extends Controller
     public function index(Request $request): JsonResponse
     {
         // Lọc các tham số từ query string chỉ lấy những tham số như status, period_from, period_to, search
-        $filters = $request->only(['status', 'period_from', 'period_to', 'search']);
+        $filters = $request->only(['status','filter_month', 'period_from', 'period_to', 'search']);
 
         $invoices = $this->tenantInvoiceService->getTenantInvoices(
             userId: $request->user()->id,

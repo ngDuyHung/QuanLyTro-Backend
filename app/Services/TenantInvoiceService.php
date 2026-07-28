@@ -47,6 +47,10 @@ class TenantInvoiceService
         if (!empty($filters['search'])) {
             $query->where('invoice_code', 'like', '%' . $filters['search'] . '%');
         }
+        // Lọc những hóa đơn có period_from nằm trong tháng được chọn (YYYY-MM)
+        if (!empty($filters['filter_month'])) {
+            $query->where('period_from', 'like', $filters['filter_month'] . '-%');
+        }
 
         return $query->latest()->paginate($perPage);
     }
