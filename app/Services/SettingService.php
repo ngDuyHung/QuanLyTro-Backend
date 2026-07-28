@@ -291,7 +291,7 @@ class SettingService
             '{{INVOICE_CODE}}' => $invoice->invoice_code ?? '',
             '{{STATUS}}' => $statusLabel,
             '{{MONTH_YEAR}}' => $invoice->period_to ? \Carbon\Carbon::parse($invoice->period_to)->format('m/Y') : '',
-            '{{CREATED_DATE}}' => \Carbon\Carbon::parse($invoice->created_at)->format('d/m/Y'),
+            '{{CREATED_DATE}}' => \Carbon\Carbon::parse($invoice->period_to)->format('d/m/Y'),
             '{{DUE_DATE}}' => $invoice->due_date ? \Carbon\Carbon::parse($invoice->due_date)->format('d/m/Y') : 'Không có',
 
             '{{LANDLORD_NAME}}' => $invoice->room->property->user->name ?? '',
