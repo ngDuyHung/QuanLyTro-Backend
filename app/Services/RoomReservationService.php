@@ -90,7 +90,7 @@ class RoomReservationService
                     'direction' => 'expense',
                     // Sử dụng other_expense hoặc refund_security_deposit tùy theo cấu hình DB
                     'category' => 'refund_security_deposit', 
-                    'accounting_type' => 'expense',
+                    'accounting_type' => 'liability_out',
                     'amount' => $refundAmount,
                     'method' => $data['payment_method'],
                     'bank_account_id' => $data['bank_account_id'] ?? null,

@@ -281,5 +281,19 @@ class InvoiceController extends Controller
     //         ->header('Content-Disposition', 'attachment; filename="Hoa_don_ban_in_' . $id . '.png"');
     // }
 
-    
+
+    public function countActive(Request $request): JsonResponse
+    {
+        $count = Invoice::query()
+            ->whereHas('lease.room.property', function ($query) use ($request): void {
+                $query->where('user_id', $request->user()->id);
+            })
+            ->whereIn('status', ['draft', 'issued'])
+            ->count();
+
+        return response()->json([
+            'success' => true,
+            'count' => $count
+        ]);
+    }
 }

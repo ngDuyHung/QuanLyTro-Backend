@@ -41,45 +41,69 @@ class FinancialTransactionService
                 throw new BusinessException('Số tiền thanh toán không được vượt quá số tiền còn nợ.');
             }
 
-            $transaction = FinancialTransaction::create([
+            // Tách số tiền thanh toán thành phần DOANH THU THẬT và phần TIỀN THẾ CHÂN (nếu hóa đơn có dòng deposit)
+            $split = $this->splitPaymentForInvoice($invoice, $amount);
+
+            $sharedFields = [
                 'property_id' => $invoice->property_id,
                 'room_id' => $invoice->room_id,
                 'lease_id' => $invoice->lease_id,
                 'tenant_id' => $invoice->lease->tenant_id ?? null,
                 'bank_account_id' => $data['bank_account_id'] ?? null,
                 'sepay_transaction_id' => null,
-
-                'transaction_code' => $this->generateTransactionCode('income'),
-
-                'direction' => 'income',
-                'category' => 'invoice_payment',
-                'accounting_type' => 'revenue',
-
-                'amount' => $amount,
                 'method' => $data['method'] ?? 'cash',
                 'status' => 'confirmed',
-
                 'transaction_date' => $data['transaction_date'] ?? now(),
-
                 'transfer_content' => $data['transfer_content'] ?? null,
                 'bank_transaction_code' => $data['bank_transaction_code'] ?? null,
-
                 'confirmed_at' => now(),
-
-                'description' => $data['description'] ?? "Thanh toán hóa đơn {$invoice->invoice_code}",
                 'note' => $data['note'] ?? null,
-
                 'created_by' => $userId,
-            ]);
+            ];
 
-            $this->allocateToInvoice(
-                transaction: $transaction,
-                invoice: $invoice,
-                amount: $amount,
-                userId: $userId
-            );
+            $primaryTransaction = null;
 
-            return $transaction->fresh([
+            if ($split['revenue'] > 0) {
+                $primaryTransaction = FinancialTransaction::create([
+                    ...$sharedFields,
+                    'transaction_code' => $this->generateTransactionCode('income'),
+                    'direction' => 'income',
+                    'category' => 'invoice_payment',
+                    'accounting_type' => 'revenue',
+                    'amount' => $split['revenue'],
+                    'description' => $data['description'] ?? "Thanh toán hóa đơn {$invoice->invoice_code}",
+                ]);
+
+                $this->allocateToInvoice(
+                    transaction: $primaryTransaction,
+                    invoice: $invoice,
+                    amount: $split['revenue'],
+                    userId: $userId
+                );
+            }
+
+            if ($split['deposit'] > 0) {
+                $depositTransaction = FinancialTransaction::create([
+                    ...$sharedFields,
+                    'transaction_code' => $this->generateTransactionCode('income'),
+                    'direction' => 'income',
+                    'category' => 'security_deposit',
+                    'accounting_type' => 'liability_in',
+                    'amount' => $split['deposit'],
+                    'description' => "Thu tiền thế chân qua hóa đơn {$invoice->invoice_code}",
+                ]);
+
+                $this->allocateToInvoice(
+                    transaction: $depositTransaction,
+                    invoice: $invoice,
+                    amount: $split['deposit'],
+                    userId: $userId
+                );
+
+                $primaryTransaction ??= $depositTransaction;
+            }
+
+            return $primaryTransaction->fresh([
                 'property',
                 'room',
                 'lease',
@@ -129,46 +153,81 @@ class FinancialTransactionService
              * - financial_transactions.amount = 2.000.000
              * - allocation.allocated_amount = 1.750.000
              * - SePay sẽ ở trạng thái partially_matched.
+             *
+             * Nếu hóa đơn có dòng "deposit" (tiền thế chân), phần allocatedAmount sẽ được TÁCH thành
+             * 2 bản ghi financial_transactions: 1 phần revenue (doanh thu thật) + 1 phần liability_in
+             * (tiền thế chân, không tính vào lợi nhuận). Phần chuyển dư (surplus) chưa cấn vào hóa đơn
+             * nào vẫn giữ nguyên là revenue như hành vi cũ.
              */
-            $transaction = FinancialTransaction::create([
+            $transferAmount = (int) $sePayTransaction->transfer_amount;
+            $surplus = max(0, $transferAmount - $allocatedAmount);
+
+            $split = $this->splitPaymentForInvoice($invoice, $allocatedAmount);
+
+            $sharedFields = [
                 'property_id' => $invoice->property_id,
                 'room_id' => $invoice->room_id,
                 'lease_id' => $invoice->lease_id,
                 'tenant_id' => $invoice->lease->tenant_id ?? null,
                 'bank_account_id' => $sePayTransaction->bank_account_id,
                 'sepay_transaction_id' => $sePayTransaction->id,
-
-                'transaction_code' => $this->generateTransactionCode('income'),
-
-                'direction' => 'income',
-                'category' => 'invoice_payment',
-                'accounting_type' => 'revenue',
-
-                'amount' => (int) $sePayTransaction->transfer_amount,
                 'method' => 'sepay',
                 'status' => 'confirmed',
-
                 'transaction_date' => $sePayTransaction->transaction_time ?? now(),
-
                 'transfer_content' => $sePayTransaction->content,
                 'bank_transaction_code' => $sePayTransaction->reference_code,
-
                 'confirmed_at' => now(),
-
-                'description' => "SePay thanh toán hóa đơn {$invoice->invoice_code}",
                 'note' => null,
-
                 'created_by' => $createdBy,
-            ]);
+            ];
 
-            $this->allocateToInvoice(
-                transaction: $transaction,
-                invoice: $invoice,
-                amount: $allocatedAmount,
-                userId: $createdBy
-            );
+            $primaryTransaction = null;
 
-            return $transaction->fresh([
+            // Phần doanh thu thật (+ phần chuyển dư chưa cấn vào hóa đơn nào, giữ nguyên hành vi cũ)
+            $revenuePortion = $split['revenue'] + $surplus;
+            if ($revenuePortion > 0) {
+                $primaryTransaction = FinancialTransaction::create([
+                    ...$sharedFields,
+                    'transaction_code' => $this->generateTransactionCode('income'),
+                    'direction' => 'income',
+                    'category' => 'invoice_payment',
+                    'accounting_type' => 'revenue',
+                    'amount' => $revenuePortion,
+                    'description' => "SePay thanh toán hóa đơn {$invoice->invoice_code}",
+                ]);
+
+                if ($split['revenue'] > 0) {
+                    $this->allocateToInvoice(
+                        transaction: $primaryTransaction,
+                        invoice: $invoice,
+                        amount: $split['revenue'],
+                        userId: $createdBy
+                    );
+                }
+            }
+
+            if ($split['deposit'] > 0) {
+                $depositTransaction = FinancialTransaction::create([
+                    ...$sharedFields,
+                    'transaction_code' => $this->generateTransactionCode('income'),
+                    'direction' => 'income',
+                    'category' => 'security_deposit',
+                    'accounting_type' => 'liability_in',
+                    'amount' => $split['deposit'],
+                    'description' => "SePay thu tiền thế chân qua hóa đơn {$invoice->invoice_code}",
+                ]);
+
+                $this->allocateToInvoice(
+                    transaction: $depositTransaction,
+                    invoice: $invoice,
+                    amount: $split['deposit'],
+                    userId: $createdBy
+                );
+
+                $primaryTransaction ??= $depositTransaction;
+            }
+
+            return $primaryTransaction->fresh([
                 'property',
                 'room',
                 'lease',
@@ -176,6 +235,50 @@ class FinancialTransactionService
                 'allocations.invoice',
             ]);
         });
+    }
+
+
+    /**
+     * Tách 1 khoản thanh toán/cấn vào hóa đơn thành 2 phần (Ưu tiên thu THẾ CHÂN trước):
+     * - 'deposit': phần tiền thế chân (charge_type = 'deposit'), sẽ được thu trước tiên.
+     * - 'revenue': phần doanh thu thật (tiền phòng, điện, nước...), sẽ thu khi phần thế chân đã đóng đủ.
+     */
+    private function splitPaymentForInvoice(Invoice $invoice, int $amount): array
+    {
+        // 1. Tính tổng số tiền thế chân yêu cầu của hóa đơn
+        $depositAmount = (int) $invoice->items()->where('charge_type', 'deposit')->sum('amount');
+
+        // Nếu hóa đơn không có hạng mục tiền thế chân, 100% tiền vào doanh thu
+        if ($depositAmount <= 0) {
+            return ['revenue' => $amount, 'deposit' => 0];
+        }
+
+        // 2. Tính số tiền thế chân đã được thu ở các lần thanh toán trả góp trước đó (nếu có)
+        $depositAlreadyRecognized = (int) FinancialTransaction::query()
+            ->whereHas('allocations', fn($q) => $q->where('invoice_id', $invoice->id))
+            ->where('category', 'security_deposit')
+            ->where('accounting_type', 'liability_in')
+            ->sum('amount');
+
+        // 3. Số tiền thế chân CÒN NỢ cần thu thêm
+        $depositRemaining = max(0, $depositAmount - $depositAlreadyRecognized);
+
+        // Nếu tiền thế chân đã thu đủ từ trước, 100% tiền đợt này vào doanh thu
+        if ($depositRemaining <= 0) {
+            return ['revenue' => $amount, 'deposit' => 0];
+        }
+
+        // 4. LOGIC MỚI: ƯU TIÊN THẾ CHÂN TRƯỚC (Waterfall Allocation)
+        // Lấy số tiền thanh toán đập vào thế chân trước, tối đa bằng số thế chân còn nợ
+        $depositPortion = min($amount, $depositRemaining);
+
+        // Phần còn thừa (nếu có) sau khi thu cọc xong mới tính là doanh thu
+        $revenuePortion = $amount - $depositPortion;
+
+        return [
+            'revenue' => $revenuePortion,
+            'deposit' => $depositPortion,
+        ];
     }
 
     /**

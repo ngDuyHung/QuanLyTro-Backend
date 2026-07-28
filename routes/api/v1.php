@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\IncidentController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OcrController;
+use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\RoomReservationController;
 use App\Http\Controllers\Api\V1\SepayConfigController;
 use App\Http\Controllers\Api\V1\SettingController;
@@ -134,6 +135,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index');
     Route::post('invoices', [InvoiceController::class, 'store'])->name('invoices.store');
     Route::post('invoices/bulk-create', [InvoiceController::class, 'bulkCreate'])->name('invoices.bulk-create');
+    Route::get('invoices/count-active', [InvoiceController::class, 'countActive']);
 
     Route::get('invoices/{id}', [InvoiceController::class, 'show'])->name('invoices.show');
     Route::put('invoices/{id}', [InvoiceController::class, 'update'])->name('invoices.update');
@@ -142,10 +144,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('invoices/{id}/issue', [InvoiceController::class, 'issue'])->name('invoices.issue');
     Route::post('invoices/{id}/cancel', [InvoiceController::class, 'cancel'])->name('invoices.cancel');
 
-    // Group Route cho cấu hình mẫu hóa đơn
-    Route::get('/settings/invoice-template', [SettingController::class, 'getInvoiceTemplate']);
-    Route::post('/settings/invoice-template', [SettingController::class, 'saveInvoiceTemplate']);
-
     // Route xuất PDF hóa đơn (Có thể đặt tiền tố /invoices cho chuẩn RESTful)
     Route::get('/invoices/{id}/export-pdf', [SettingController::class, 'exportInvoicePdf']);
     Route::get('/invoices/{id}/preview', [InvoiceController::class, 'previewHtml']);
@@ -153,6 +151,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
     // Route xuất hình ảnh hóa đơn (Có thể đặt tiền tố /invoices cho chuẩn RESTful)
     Route::get('/invoices/{id}/export-image', [InvoiceController::class, 'exportInvoiceImage']);
     Route::get('invoices/{id}/export-pdf-image', [InvoiceController::class, 'exportInvoicePdfImage']);
+
+    // Group Route cho cấu hình mẫu hóa đơn
+    Route::get('/settings/invoice-template', [SettingController::class, 'getInvoiceTemplate']);
+    Route::post('/settings/invoice-template', [SettingController::class, 'saveInvoiceTemplate']);
 
     // ── Financial Transactions (Thu chi) ─────────────────────────────────────
     Route::get('financial-transactions', [FinancialTransactionController::class, 'index'])
@@ -229,14 +231,28 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/ledgers/{id}/export-pdf', [SettingController::class, 'exportLedgerPdf']);
 
     // ── Incidents (Sự cố) ─────────────────────────────────────────────────────
+    // 1. CHUYỂN DÒNG NÀY LÊN ĐẦU TIÊN (Route tĩnh không có tham số)
+    Route::get('incidents/count-active', [IncidentController::class, 'countActive']);
+
     Route::apiResource('incidents', IncidentController::class);
     Route::patch('incidents/{id}/process', [IncidentController::class, 'process']);
     Route::post('incidents/{id}/resolve', [IncidentController::class, 'resolve']);
     Route::patch('incidents/{id}/cancel', [IncidentController::class, 'cancel']);
 
+
     // ── Dashboard (Thống kê) ───────────────────────────────────────────────
     Route::get('dashboard', [DashboardController::class, 'index']);
 
+    // ── Reports (Báo cáo Thống kê) ───────────────────────────────────────────────
+    Route::prefix('reports')->name('reports.')->group(function () {
+        Route::get('/financial', [App\Http\Controllers\Api\V1\ReportController::class, 'getFinancialReport'])->name('financial');
+        Route::get('/ledger', [App\Http\Controllers\Api\V1\ReportController::class, 'getLedgerReport'])->name('ledger');
+        Route::get('/debt', [App\Http\Controllers\Api\V1\ReportController::class, 'getDebtReport'])->name('debt');
+        Route::get('/occupancy', [App\Http\Controllers\Api\V1\ReportController::class, 'getOccupancyReport'])->name('occupancy');
+
+        // Route xuất Excel Báo cáo Sổ quỹ
+        Route::get('/ledger/export/excel', [App\Http\Controllers\Api\V1\ReportController::class, 'exportLedgerExcel'])->name('ledger.export.excel');
+    });
 
     // ── Tenant Dashboard ───────────────────────────────────────────────────
     Route::get('tenant/dashboard', [DashboardController::class, 'tenantIndex'])->name('tenant.dashboard');

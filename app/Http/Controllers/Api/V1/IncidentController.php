@@ -193,4 +193,24 @@ class IncidentController extends Controller
             throw new BusinessException('Bạn không có quyền thao tác trên khu nhà này.');
         }
     }
+
+    /**
+     * API: Đếm số lượng sự cố đang cần xử lý (pending & processing)
+     */
+    public function countActive(Request $request): JsonResponse
+    {
+        // Sử dụng hàm count() của Query Builder, nó sẽ sinh ra câu lệnh SQL: SELECT COUNT(*)
+        // Không tốn RAM để load model, không query các relationships không cần thiết.
+        $count = Incident::query()
+            ->whereHas('property', function ($query) use ($request): void {
+                $query->where('user_id', $request->user()->id);
+            })
+            ->whereIn('status', ['pending', 'processing'])
+            ->count();
+
+        return response()->json([
+            'success' => true,
+            'count' => $count
+        ]);
+    }
 }
