@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\V1\AccountingLedgerController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BankAccountController;
+use App\Http\Controllers\Api\V1\CronController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\LeaseController;
 use App\Http\Controllers\Api\V1\LeaseMemberController;
@@ -20,6 +21,7 @@ use App\Http\Controllers\Api\V1\IncidentController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OcrController;
+use App\Http\Controllers\Api\V1\PushSubscriptionController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\RoomReservationController;
 use App\Http\Controllers\Api\V1\SepayConfigController;
@@ -156,6 +158,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/settings/invoice-template', [SettingController::class, 'getInvoiceTemplate']);
     Route::post('/settings/invoice-template', [SettingController::class, 'saveInvoiceTemplate']);
 
+    // API Cài đặt thông báo & Test Push
+    Route::get('settings/auto-remind', [SettingController::class, 'getAutoRemindSetting']);
+    Route::post('settings/auto-remind', [SettingController::class, 'toggleAutoRemind']);
+    Route::post('settings/test-push', [SettingController::class, 'testPushNotification']);
+
     // ── Financial Transactions (Thu chi) ─────────────────────────────────────
     Route::get('financial-transactions', [FinancialTransactionController::class, 'index'])
         ->name('financial-transactions.index');
@@ -254,6 +261,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/ledger/export/excel', [App\Http\Controllers\Api\V1\ReportController::class, 'exportLedgerExcel'])->name('ledger.export.excel');
     });
 
+    // ── Web Push Notifications (Thông báo đẩy) ───────────────────────────────
+    Route::post('/push/subscribe', [PushSubscriptionController::class, 'subscribe']);
+    Route::post('/push/unsubscribe', [PushSubscriptionController::class, 'unsubscribe']);
+
     // ── Tenant Dashboard ───────────────────────────────────────────────────
     Route::get('tenant/dashboard', [DashboardController::class, 'tenantIndex'])->name('tenant.dashboard');
 
@@ -309,3 +320,5 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
 // 1. THÊM ROUTE WEBHOOK VÀO PHẦN PUBLIC (Nằm ngoài auth:sanctum)
 Route::post('sepay-webhook', [SePayTransactionController::class, 'webhook'])->name('sepay.webhook');
+// ROUTE CRONJOB Ở ĐÂY
+Route::post('cron/remind-utility-readings', [CronController::class, 'remindUtilityReadings']);

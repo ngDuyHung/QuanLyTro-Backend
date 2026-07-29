@@ -12,6 +12,7 @@
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^2.10.1",
         "maatwebsite/excel": "^3.1",
+        "minishlink/web-push": "^11.0",
         "sepayvn/laravel-sepay": "^1.2",
         "spatie/laravel-permission": "^6.25"
     },

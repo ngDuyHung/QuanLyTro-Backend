@@ -210,12 +210,23 @@ class LeaseService
      */
     public function createFromImport(int $roomId, array $data): Lease
     {
+        // 1. Tạo tài khoản đăng nhập trước (tương tự createLease)
+        $accountTenant = $this->authService->registerTenant([
+            'name'      => trim((string)$data['tenant_full_name']),
+            'phone'     => preg_replace('/\D/', '', (string)$data['tenant_phone']),
+            'email'     => !empty($data['tenant_email']) ? strtolower(trim((string)$data['tenant_email'])) : null,
+            'password'  => preg_replace('/\D/', '', (string)$data['tenant_phone']), // Mật khẩu mặc định là SĐT
+            'is_active' => true,
+        ]);
+
+        // 2. Tạo hoặc cập nhật Tenant và gán user_id
         $tenant = Tenant::updateOrCreate(
             ['id_card_number' => trim((string)$data['tenant_id_card_number'])],
             [
                 'full_name' => trim((string)$data['tenant_full_name']),
                 'phone'     => preg_replace('/\D/', '', (string)$data['tenant_phone']),
                 'email'     => !empty($data['tenant_email']) ? strtolower(trim((string)$data['tenant_email'])) : null,
+                'user_id'   => $accountTenant->id, // Bổ sung ID tài khoản vừa tạo
             ]
         );
 

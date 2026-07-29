@@ -10,7 +10,10 @@ use App\Http\Requests\Setting\ExportLedgerPdfRequest;
 use App\Http\Requests\Setting\SaveContractTemplateRequest;
 use App\Http\Requests\Setting\SaveLedgerTemplateRequest;
 use App\Http\Resources\Setting\SettingResource;
+use App\Models\PushSubscription;
+use App\Models\Setting;
 use App\Services\SettingService;
+use App\Services\WebPushService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -148,5 +151,67 @@ class SettingController extends Controller
     {
         $pdf = $this->settingService->generateLedgerPdf($id, $request->user()->id);
         return $pdf->download("So_Ke_Toan_S1a_HKD_{$id}.pdf");
+    }
+
+
+    /**
+     * Lấy trạng thái cài đặt nhắc nhở
+     */
+    public function getAutoRemindSetting(Request $request)
+    {
+        $setting = Setting::where('user_id', $request->user()->id)
+            ->where('key', 'auto_remind_utility')
+            ->first();
+
+        // Mặc định là true nếu chưa lưu
+        $isActive = $setting ? ($setting->value === 'true') : true;
+
+        return response()->json(['auto_remind_utility' => $isActive]);
+    }
+
+    /**
+     * Bật/Tắt tính năng tự động nhắc nhở
+     */
+    public function toggleAutoRemind(Request $request)
+    {
+        $request->validate(['is_active' => 'required|boolean']);
+
+        Setting::updateOrCreate(
+            ['user_id' => $request->user()->id, 'key' => 'auto_remind_utility'],
+            ['value' => $request->is_active ? 'true' : 'false']
+        );
+
+        return response()->json(['message' => 'Cập nhật trạng thái thành công.']);
+    }
+
+    /**
+     * Test gửi Push Notification đến thiết bị của CHÍNH CHỦ TRỌ
+     */
+    public function testPushNotification(Request $request, WebPushService $webPushService)
+    {
+        $userId = $request->user()->id;
+
+        // Tìm thiết bị của chủ trọ đang đăng nhập
+        $subscriptions = PushSubscription::where('user_id', $userId)
+            ->where('is_active', true)
+            ->get();
+
+        if ($subscriptions->isEmpty()) {
+            return response()->json([
+                'message' => 'Bạn chưa cấp quyền thông báo trên thiết bị này. Vui lòng cấp quyền ở góc URL trình duyệt trước khi test.'
+            ], 400);
+        }
+
+        $payload = [
+            'title' => '🔔 Thông báo thử nghiệm',
+            'body' => 'Hệ thống gửi thông báo đẩy đang hoạt động tuyệt vời!',
+            'url' => '/settings', // Trỏ về trang cài đặt
+            'icon' => '/icon.png'
+        ];
+
+        // Gửi qua Service
+        $webPushService->sendNotifications($subscriptions, $payload);
+
+        return response()->json(['message' => 'Đã gửi thông báo test thành công. Vui lòng kiểm tra màn hình thiết bị.']);
     }
 }

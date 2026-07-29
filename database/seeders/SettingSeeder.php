@@ -137,5 +137,10 @@ class SettingSeeder extends Seeder
             ['user_id' => null, 'key' => 'invoice_template'],
             ['value' => $defaultInvoiceTemplate]
         );
+
+        Setting::updateOrCreate(
+            ['user_id' => null, 'key' => 'auto_remind_utility'],
+            ['value' => 'true'] // Mặc định là bật
+        );
     }
 }
