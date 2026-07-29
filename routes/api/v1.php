@@ -320,5 +320,5 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
 // 1. THÊM ROUTE WEBHOOK VÀO PHẦN PUBLIC (Nằm ngoài auth:sanctum)
 Route::post('sepay-webhook', [SePayTransactionController::class, 'webhook'])->name('sepay.webhook');
-// ROUTE CRONJOB Ở ĐÂY
+// 2. ROUTE CRONJOB Ở ĐÂY
 Route::post('cron/remind-utility-readings', [CronController::class, 'remindUtilityReadings']);
