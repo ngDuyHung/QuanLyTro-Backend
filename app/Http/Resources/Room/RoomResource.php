@@ -178,7 +178,7 @@ class RoomResource extends JsonResource
                     if (
                         !$latest ||
                         !$latest->period_from ||
-                        $latest->period_from->format('Y-m') !== $currentMonth
+                        $latest->period_from->format('Y-m') < $currentMonth
                     ) {
                         return 'unbilled'; // Trạng thái: Chưa lập hóa đơn tháng này
                     }
