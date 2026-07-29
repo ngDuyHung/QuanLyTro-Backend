@@ -519,7 +519,7 @@ class InvoiceService
         }
 
 
-        // LOGIC TỰ ĐỘNG THÊM PHÍ SỬA CHỮA (SỰ CỐ KHÁCH THUÊ CHỊU PHÍ)
+        // TỰ ĐỘNG THÊM PHÍ SỬA CHỮA (SỰ CỐ KHÁCH THUÊ CHỊU PHÍ)
         $unbilledIncidents = Incident::where('room_id', $lease->room_id)
             ->where('status', 'resolved') // Đã giải quyết xong
             ->where('payer', 'tenant')    // Khách thuê phải trả tiền
