@@ -72,7 +72,7 @@ class TenantResource extends JsonResource
             'room_id' => $this->currentResidence?->room_id,
             'property_id' => $this->currentResidence?->room?->property_id,
             'role' => $this->currentResidence?->role ?? 'member',
-            'status' => $this->currentResidence?->status ?? 'pending',
+            'status' => $this->currentResidence?->status ?? 'left',
             'move_in_date' => $this->currentResidence?->move_in_date?->toDateString(),
             'move_out_date' => $this->currentResidence?->move_out_date?->toDateString(),
 
