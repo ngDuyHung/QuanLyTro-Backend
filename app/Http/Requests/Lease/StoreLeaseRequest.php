@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Lease;
 
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Carbon;
 
 class StoreLeaseRequest extends FormRequest
 {
@@ -19,6 +21,7 @@ class StoreLeaseRequest extends FormRequest
             // ── Thông tin hợp đồng ──────────────────────────────────────
             'room_id'             => ['required', 'integer', 'exists:rooms,id'],
             'start_date'          => ['required', 'date', 'date_format:Y-m-d'],
+            'end_date'            => ['nullable', 'date', 'date_format:Y-m-d', 'after:start_date'],
             'billing_day'         => ['nullable', 'integer', 'min:1', 'max:28'],
             'deposit'             => ['nullable', 'integer', 'min:0'],
             'room_price'          => ['nullable', 'integer', 'min:0'],
@@ -53,6 +56,29 @@ class StoreLeaseRequest extends FormRequest
             'start_date.required'                  => 'Ngày bắt đầu hợp đồng không được để trống.',
             'start_date.date'                      => 'Ngày bắt đầu không hợp lệ.',
             'start_date.date_format'               => 'Ngày bắt đầu phải đúng định dạng YYYY-MM-DD.',
+
+            'end_date.date'        => 'Ngày kết thúc không hợp lệ.',
+            'end_date.date_format' => 'Ngày kết thúc phải đúng định dạng YYYY-MM-DD.',
+            'end_date.after'       => 'Ngày kết thúc hợp đồng phải sau ngày bắt đầu.',
+            'end_date' => [
+                'nullable',
+                'date',
+                'date_format:Y-m-d',
+                function (string $attribute, mixed $value, Closure $fail) {
+                    $startDate = $this->input('start_date');
+
+                    if ($startDate && $value) {
+                        // Cộng thêm 1 tháng vào start_date (dùng NoOverflow để tránh lỗi ngày 31)
+                        $minEndDate = Carbon::parse($startDate)->addMonthNoOverflow();
+
+                        // Nếu end_date nhỏ hơn minEndDate -> Báo lỗi
+                        if (Carbon::parse($value)->lt($minEndDate)) {
+                            $fail('Thời hạn hợp đồng phải tối thiểu là 1 tháng.');
+                        }
+                    }
+                }
+            ],
+
             'billing_day.integer'                  => 'Ngày thu tiền phải là số nguyên.',
             'billing_day.min'                      => 'Ngày thu tiền tối thiểu là 1.',
             'billing_day.max'                      => 'Ngày thu tiền tối đa là 28.',
@@ -106,6 +132,7 @@ class StoreLeaseRequest extends FormRequest
         return [
             'room_id'                    => 'phòng',
             'start_date'                 => 'ngày bắt đầu',
+            'end_date' => 'ngày kết thúc',
             'billing_day'                => 'ngày thu tiền',
             'deposit'                    => 'tiền cọc',
             'room_price'                 => 'giá thuê phòng',

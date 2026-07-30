@@ -78,6 +78,7 @@ class LeaseService
                     'room_id' => $room->id,
                     'tenant_id' => $tenant->id,
                     'start_date' => $data['start_date'],
+                    'end_date' => $data['end_date'] ?? null,
                     'billing_day' => $data['billing_day'] ?? 1,
                     'deposit' => $data['deposit'] ?? 0,
                     'room_price' => $data['room_price'] ?? 0,

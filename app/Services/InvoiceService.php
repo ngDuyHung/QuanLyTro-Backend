@@ -395,7 +395,7 @@ class InvoiceService
      */
 
 
-    public function prepareInvoiceData(int $leaseId, string $periodTo, int $userId): array
+    public function prepareInvoiceData(int $leaseId, string $periodTo, int $userId, bool $isCheckout = false): array
     {
         $lease = Lease::with(['room.property', 'tenant', 'serviceItems', 'members'])
             ->whereHas('room.property', fn($q) => $q->where('user_id', $userId))
@@ -480,41 +480,57 @@ class InvoiceService
             ];
         }
 
-        // LOGIC TỰ ĐỘNG THÊM TIỀN THẾ CHÂN (CHO HÓA ĐƠN ĐẦU TIÊN)
-        // 1. Kiểm tra xem hợp đồng này đã có hóa đơn nào chưa (bỏ qua hóa đơn đã hủy)
-        $hasInvoice = \App\Models\Invoice::where('lease_id', $lease->id)
-            ->where('status', '!=', 'cancelled')
-            ->exists();
-
-        // 2. Nếu là hóa đơn đầu tiên (chưa từng tạo) và hợp đồng có yêu cầu tiền cọc
-        if (!$hasInvoice && $lease->deposit > 0) {
-
-            // Tìm số tiền khách đã cọc (Chỉ lấy đúng phiếu cọc của hợp đồng này)
-            $reservationDeposit = \App\Models\RoomReservation::where('lease_id', $lease->id)
-                ->where('status', 'completed')
-                ->sum('deposit_amount');
-
-            // Tính số dư cọc cần thu
-            $remainingDeposit = (int)$lease->deposit - $reservationDeposit;
-
-            // Nếu số tiền phải thu lớn hơn 0 thì nhét vào mảng gợi ý
-            if ($remainingDeposit > 0) {
-                // Format lại số tiền cọc cũ cho đẹp (VD: 500.000)
-                $formattedResDeposit = number_format((float)$reservationDeposit, 0, ',', '.');
-
-                // Tạo câu mô tả rõ nghĩa, tránh gây hiểu lầm
-                $description = $reservationDeposit > 0
-                    ? "Tiền thế chân thu bổ sung (Đã trừ cọc: {$formattedResDeposit}đ)"
-                    : "Tiền thế chân (Thu 1 lần duy nhất)";
-
+        // XỬ LÝ TIỀN THẾ CHÂN THEO NGỮ CẢNH (ĐANG THUÊ vs THANH LÝ)
+        if ($isCheckout) {
+            // NẾU LÀ THANH LÝ: Lấy toàn bộ tiền cọc cho vào Giảm trừ
+            if ($lease->deposit > 0) {
                 $dynamicItems[] = [
                     'id' => time() + 999,
-                    'charge_type'            => 'deposit',
-                    'description'            => $description,
-                    'unit'                   => 'Khoản', // Đổi từ "Lần" sang "Khoản" nghe trang trọng hơn
+                    'charge_type'            => 'discount', // Đưa vào giảm trừ
+                    'description'            => 'Cấn trừ Tiền thế chân (Hoàn cọc)',
+                    'unit'                   => 'Khoản',
                     'quantity'               => 1,
-                    'unit_price_snapshot'    => $remainingDeposit,
+                    'unit_price_snapshot'    => $lease->deposit,
                 ];
+            }
+        } else {
+
+            // LOGIC TỰ ĐỘNG THÊM TIỀN THẾ CHÂN (CHO HÓA ĐƠN ĐẦU TIÊN)
+            // 1. Kiểm tra xem hợp đồng này đã có hóa đơn nào chưa (bỏ qua hóa đơn đã hủy)
+            $hasInvoice = \App\Models\Invoice::where('lease_id', $lease->id)
+                ->where('status', '!=', 'cancelled')
+                ->exists();
+
+            // 2. Nếu là hóa đơn đầu tiên (chưa từng tạo) và hợp đồng có yêu cầu tiền cọc
+            if (!$hasInvoice && $lease->deposit > 0) {
+
+                // Tìm số tiền khách đã cọc (Chỉ lấy đúng phiếu cọc của hợp đồng này)
+                $reservationDeposit = \App\Models\RoomReservation::where('lease_id', $lease->id)
+                    ->where('status', 'completed')
+                    ->sum('deposit_amount');
+
+                // Tính số dư cọc cần thu
+                $remainingDeposit = (int)$lease->deposit - $reservationDeposit;
+
+                // Nếu số tiền phải thu lớn hơn 0 thì nhét vào mảng gợi ý
+                if ($remainingDeposit > 0) {
+                    // Format lại số tiền cọc cũ cho đẹp (VD: 500.000)
+                    $formattedResDeposit = number_format((float)$reservationDeposit, 0, ',', '.');
+
+                    // Tạo câu mô tả rõ nghĩa, tránh gây hiểu lầm
+                    $description = $reservationDeposit > 0
+                        ? "Tiền thế chân thu bổ sung (Đã trừ cọc: {$formattedResDeposit}đ)"
+                        : "Tiền thế chân (Thu 1 lần duy nhất)";
+
+                    $dynamicItems[] = [
+                        'id' => time() + 999,
+                        'charge_type'            => 'deposit',
+                        'description'            => $description,
+                        'unit'                   => 'Khoản', // Đổi từ "Lần" sang "Khoản" nghe trang trọng hơn
+                        'quantity'               => 1,
+                        'unit_price_snapshot'    => $remainingDeposit,
+                    ];
+                }
             }
         }
 

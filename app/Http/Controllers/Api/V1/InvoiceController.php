@@ -254,7 +254,8 @@ class InvoiceController extends Controller
         $data = $this->invoiceService->prepareInvoiceData(
             leaseId: (int) $request->lease_id,
             periodTo: $request->period_to,
-            userId: $request->user()->id
+            userId: $request->user()->id,
+            isCheckout: $request->boolean('is_checkout')
         );
 
         return response()->json(['data' => $data]);

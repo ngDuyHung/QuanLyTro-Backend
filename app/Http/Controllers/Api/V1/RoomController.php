@@ -47,10 +47,13 @@ class RoomController extends Controller
                 ->orderBy('id'),
             'reservations' => fn($query) => $query
                 ->where('status', 'pending'),
-            // Lấy các hóa đơn đang nợ để tính tổng tiền[cite: 2]
-            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue']),
-            // THÊM DÒNG NÀY: Lấy hóa đơn mới nhất để check xem tháng này đã lập chưa
-            'latestInvoice' // funct trong model
+            // Lấy các hóa đơn đang nợ CỦA HỢP ĐỒNG HIỆN TẠI
+            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+                ->whereHas('lease', fn($q) => $q->where('status', 'active')),
+
+            // Lấy hóa đơn mới nhất CỦA HỢP ĐỒNG HIỆN TẠI
+            'latestInvoice' => fn($query) => $query
+                ->whereHas('lease', fn($q) => $q->where('status', 'active'))
         ])
             ->where('property_id', $property->id)
             ->when(
@@ -79,8 +82,13 @@ class RoomController extends Controller
                 ->orderByRaw("role = 'representative' desc")
                 ->orderBy('id'),
             'reservations' => fn($query) => $query->where('status', 'pending'),
-            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue']),
-            'latestInvoice'
+            // Lấy các hóa đơn đang nợ CỦA HỢP ĐỒNG HIỆN TẠI
+            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+                ->whereHas('lease', fn($q) => $q->where('status', 'active')),
+
+            // Lấy hóa đơn mới nhất CỦA HỢP ĐỒNG HIỆN TẠI
+            'latestInvoice' => fn($query) => $query
+                ->whereHas('lease', fn($q) => $q->where('status', 'active'))
         ])
             ->whereHas(
                 'property',
@@ -143,8 +151,10 @@ class RoomController extends Controller
                 ->orderByRaw("role = 'representative' desc")
                 ->orderBy('id'),
             'reservations' => fn($query) => $query->where('status', 'pending'),
-            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue']),
-            'latestInvoice'
+            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+                ->whereHas('lease', fn($q) => $q->where('status', 'active')),
+            'latestInvoice' => fn($query) => $query
+                ->whereHas('lease', fn($q) => $q->where('status', 'active'))
         ])
             ->whereHas('property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
