@@ -65,4 +65,29 @@ class TenantLeaseController extends Controller
 
         return response()->json(['html' => $html]);
     }
+
+    /**
+     * Đăng ký trả phòng
+     */
+    public function registerCheckout(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'move_out_date' => ['required', 'date', 'date_format:Y-m-d'],
+        ], [
+            'move_out_date.required' => 'Vui lòng chọn ngày dự kiến trả phòng.',
+            'move_out_date.date' => 'Định dạng ngày không hợp lệ.',
+            'move_out_date.date_format' => 'Định dạng ngày phải là YYYY-MM-DD.',
+        ]);
+
+        $lease = $this->tenantLeaseService->registerCheckoutNotice(
+            $id,
+            $request->move_out_date,
+            $request->user()->id
+        );
+
+        return response()->json([
+            'message' => 'Đăng ký trả phòng thành công.',
+            'data' => new LeaseResource($lease)
+        ]);
+    }
 }

@@ -482,17 +482,8 @@ class InvoiceService
 
         // XỬ LÝ TIỀN THẾ CHÂN THEO NGỮ CẢNH (ĐANG THUÊ vs THANH LÝ)
         if ($isCheckout) {
-            // NẾU LÀ THANH LÝ: Lấy toàn bộ tiền cọc cho vào Giảm trừ
-            if ($lease->deposit > 0) {
-                $dynamicItems[] = [
-                    'id' => time() + 999,
-                    'charge_type'            => 'discount', // Đưa vào giảm trừ
-                    'description'            => 'Cấn trừ Tiền thế chân (Hoàn cọc)',
-                    'unit'                   => 'Khoản',
-                    'quantity'               => 1,
-                    'unit_price_snapshot'    => $lease->deposit,
-                ];
-            }
+            // THEO LUỒNG ĐỘC LẬP: Không tự động đưa tiền cọc vào làm giảm trừ hóa đơn nữa.
+            // Hóa đơn thanh lý chỉ chứa phí dịch vụ. Việc hoàn cọc sẽ được xử lý riêng ở Modal EndLease.
         } else {
 
             // LOGIC TỰ ĐỘNG THÊM TIỀN THẾ CHÂN (CHO HÓA ĐƠN ĐẦU TIÊN)

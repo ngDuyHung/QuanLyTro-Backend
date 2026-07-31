@@ -48,9 +48,8 @@ class RoomController extends Controller
             'reservations' => fn($query) => $query
                 ->where('status', 'pending'),
             // Lấy các hóa đơn đang nợ CỦA HỢP ĐỒNG HIỆN TẠI
-            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+            'invoices' => fn($query) => $query->whereIn('status', ['draft', 'issued', 'partially_paid', 'overdue'])
                 ->whereHas('lease', fn($q) => $q->where('status', 'active')),
-
             // Lấy hóa đơn mới nhất CỦA HỢP ĐỒNG HIỆN TẠI
             'latestInvoice' => fn($query) => $query
                 ->whereHas('lease', fn($q) => $q->where('status', 'active'))
@@ -83,7 +82,7 @@ class RoomController extends Controller
                 ->orderBy('id'),
             'reservations' => fn($query) => $query->where('status', 'pending'),
             // Lấy các hóa đơn đang nợ CỦA HỢP ĐỒNG HIỆN TẠI
-            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+            'invoices' => fn($query) => $query->whereIn('status', ['draft', 'issued', 'partially_paid', 'overdue'])
                 ->whereHas('lease', fn($q) => $q->where('status', 'active')),
 
             // Lấy hóa đơn mới nhất CỦA HỢP ĐỒNG HIỆN TẠI
@@ -151,7 +150,7 @@ class RoomController extends Controller
                 ->orderByRaw("role = 'representative' desc")
                 ->orderBy('id'),
             'reservations' => fn($query) => $query->where('status', 'pending'),
-            'invoices' => fn($query) => $query->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+            'invoices' => fn($query) => $query->whereIn('status', ['draft', 'issued', 'partially_paid', 'overdue'])
                 ->whereHas('lease', fn($q) => $q->where('status', 'active')),
             'latestInvoice' => fn($query) => $query
                 ->whereHas('lease', fn($q) => $q->where('status', 'active'))

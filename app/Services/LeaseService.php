@@ -22,7 +22,8 @@ class LeaseService
 {
     public function __construct(
         private readonly TenantService $tenantService,
-        private readonly AuthService $authService
+        private readonly AuthService $authService,
+        private readonly FinancialTransactionService $financialTransactionService
     ) {}
 
     /**
@@ -171,13 +172,13 @@ class LeaseService
     /**
      * Kết thúc hợp đồng, chuyển phòng về trống và cho toàn bộ khách rời phòng.
      */
-    public function endLease(Lease $lease): Lease
+    public function endLease(Lease $lease, array $refundData = [], ?int $userId = null): Lease
     {
         if (!$lease->status->isActive()) {
             throw new BusinessException('Hợp đồng đã kết thúc trước đó, không thể thực hiện lại.');
         }
 
-        return DB::transaction(function () use ($lease): Lease {
+        return DB::transaction(function () use ($lease, $refundData, $userId): Lease {
             $date = now()->toDateString();
 
             $lease->update([
@@ -201,6 +202,26 @@ class LeaseService
             $lease->room->update([
                 'status' => RoomStatus::Available->value,
             ]);
+
+            // --- BẮT ĐẦU: XỬ LÝ SINH PHIẾU CHI HOÀN CỌC ---
+            $refundAmount = (int) ($refundData['refund_amount'] ?? 0);
+            if ($refundAmount > 0 && $userId !== null) {
+                $this->financialTransactionService->createGeneralTransaction([
+                    'property_id' => $lease->room->property_id,
+                    'room_id' => $lease->room_id,
+                    'lease_id' => $lease->id,
+                    'tenant_id' => $lease->tenant_id,
+                    'direction' => 'expense',
+                    'category' => 'refund_security_deposit', // <--- ĐÃ SỬA LẠI THÀNH CHỮ NÀY
+                    'accounting_type' => 'liability_out',
+                    'amount' => $refundAmount,
+                    'method' => $refundData['refund_method'] ?? 'cash',
+                    'status' => 'confirmed',
+                    'transaction_date' => $date,
+                    'description' => 'Hoàn trả tiền thế chân khi kết thúc hợp đồng',
+                ], $userId);
+            }
+            // --- KẾT THÚC ---
 
             return $lease->fresh(['room.property', 'tenant']);
         });

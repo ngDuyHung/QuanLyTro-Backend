@@ -28,7 +28,12 @@ class LeaseController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $leases = Lease::with(['room:id,name,property_id', 'room.property:id,name', 'tenant:id,full_name,phone'])
+        $leases = Lease::with([
+            'room:id,name,property_id',
+            'room.property:id,name',
+            'tenant:id,full_name,phone',
+            'invoices:id,lease_id,invoice_code,invoice_type,status,period_to,total_amount,remaining_amount'
+        ])
             ->whereHas('room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->when($request->room_id,     fn($q) => $q->where('room_id', $request->room_id))
             ->when($request->tenant_id,   fn($q) => $q->where('tenant_id', $request->tenant_id))
@@ -156,11 +161,18 @@ class LeaseController extends Controller
      */
     public function end(Request $request, int $id): JsonResponse
     {
+        // 1. Validate thêm các trường liên quan đến hoàn cọc
+        $data = $request->validate([
+            'refund_amount' => 'nullable|numeric|min:0',
+            'refund_method' => 'nullable|in:cash,transfer',
+        ]);
+
         $lease = Lease::with('room')
             ->whereHas('room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
 
-        $lease = $this->leaseService->endLease($lease);
+        // 2. Truyền thêm data hoàn cọc và userId xuống Service
+        $lease = $this->leaseService->endLease($lease, $data, $request->user()->id);
 
         return (new LeaseResource($lease))->response();
     }

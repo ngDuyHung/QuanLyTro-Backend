@@ -292,6 +292,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/', [TenantLeaseController::class, 'index']);
         Route::get('/{id}', [TenantLeaseController::class, 'show']);
         Route::get('/{id}/preview-html', [TenantLeaseController::class, 'previewHtml']);
+
+        Route::post('/{id}/checkout', [TenantLeaseController::class, 'registerCheckout']);
     });
 
     Route::prefix('tenant/incidents')->name('tenant.incidents.')->group(function () {
