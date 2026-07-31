@@ -85,6 +85,14 @@ class FinancialTransactionController extends Controller
             ->when($request->query('date_to'), function ($query, $dateTo): void {
                 $query->whereDate('transaction_date', '<=', $dateTo);
             })
+            ->when($request->query('search'), function ($query, $search): void {
+                $query->where(function ($q) use ($search) {
+                    $q->where('transaction_code', 'like', '%' . $search . '%')
+                        ->orWhereHas('allocations.invoice', function ($subQ) use ($search) {
+                            $subQ->where('invoice_code', 'like', '%' . $search . '%');
+                        });
+                });
+            })
             ->orderBy('transaction_date', 'desc') // Sắp xếp theo ngày mới nhất
             ->orderBy('id', 'desc')               // Nếu trùng ngày, ID nào lớn hơn (tạo sau) lên trước
             ->paginate($request->integer('per_page', 15));

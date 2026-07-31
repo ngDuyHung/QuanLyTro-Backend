@@ -69,6 +69,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('properties/{propertyId}/rooms', [RoomController::class, 'index'])->name('properties.rooms.index');
     Route::post('properties/{propertyId}/rooms', [RoomController::class, 'store'])->name('properties.rooms.store');
 
+
+    // API mới: Lấy danh sách khách nợ tiền (đặt trước route rooms/{room})
+    Route::get('/rooms/debtors', [RoomController::class, 'debtors'])->name('rooms.debtors');
+
     // Chi tiết, cập nhật, xóa, đổi trạng thái phòng
     Route::get('/rooms', [RoomController::class, 'all'])->name('rooms.all');
     Route::get('rooms/{room}', [RoomController::class, 'show'])->name('rooms.show');

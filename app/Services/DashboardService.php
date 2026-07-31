@@ -370,6 +370,19 @@ class DashboardService
             ->orderBy('sort_order')
             ->first();
 
+        $daysLeft = null;
+        $totalDays = null;
+
+        if ($activeLease->end_date) {
+            $now = now()->startOfDay();
+            $startDate = Carbon::parse($activeLease->start_date)->startOfDay(); // startOfDay là để tránh sai lệch khi tính toán số ngày còn lại nếu giờ hiện tại đã vượt quá giờ kết thúc của ngày hợp đồng 
+            $endDate = Carbon::parse($activeLease->end_date)->startOfDay();
+
+            $daysLeft = (int) $now->diffInDays($endDate, false);
+            // Tính tổng số ngày của hợp đồng
+            $totalDays = (int) $startDate->diffInDays($endDate);
+        }
+
         // 4. Trả về cấu trúc JSON phân nhóm rõ ràng
         return [
             'room_info' => [
@@ -386,6 +399,8 @@ class DashboardService
                 'end_date'   => $activeLease->end_date,
                 'deposit'    => $activeLease->deposit,
                 'occupants_count' => $activeLease->occupants_count,
+                'days_left'  => $daysLeft,
+                'total_days' => $totalDays,
             ],
             'unpaid_invoices' => $unpaidInvoices,
             'recent_invoices' => $recentInvoices,

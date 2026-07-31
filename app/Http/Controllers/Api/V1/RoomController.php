@@ -422,6 +422,23 @@ class RoomController extends Controller
             ->whereHas('reservations', fn($q) => $q->where('status', 'pending'))
             ->count();
 
+        // 1. Tính số phòng đang nợ tiền (Có hóa đơn trạng thái phát hành/nợ và số tiền nợ > 0)
+        $debtRooms = (clone $baseQuery)
+            ->whereHas('invoices', function ($q) {
+                $q->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+                    ->where('remaining_amount', '>', 0)
+                    ->whereHas('lease', fn($leaseQuery) => $leaseQuery->where('status', 'active'));
+            })
+            ->count();
+
+        // 2. Tính tổng số tiền đang nợ (chuẩn bị sẵn nếu Frontend muốn hiển thị tổng tiền nợ)
+        $currentDebtAmount = \App\Models\Invoice::query()
+            ->whereIn('room_id', (clone $baseQuery)->select('id'))
+            ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+            ->where('remaining_amount', '>', 0)
+            ->whereHas('lease', fn($q) => $q->where('status', 'active'))
+            ->sum('remaining_amount');
+
         $percent = fn(int $value): int => $total > 0
             ? (int) round(($value / $total) * 100)
             : 0;
@@ -439,10 +456,114 @@ class RoomController extends Controller
             'maintenance_rate' => $percent($maintenance),
             'reserved_rate' => $percent($reserved),
 
-            // Chưa có module công nợ/hóa đơn thì tạm để 0.
-            'debt_rooms' => 0,
-            'debt_rate' => 0,
-            'current_debt_amount' => 0,
+            // Dữ liệu công nợ đã được tính toán realtime
+            'debt_rooms' => $debtRooms,
+            'debt_rate' => $percent($debtRooms),
+            'current_debt_amount' => (int) $currentDebtAmount,
         ];
+    }
+
+
+    /**
+     * Lấy danh sách khách hàng có Lịch sử thanh toán xấu (Hay nợ, Nợ dai)
+     */
+    public function debtors(Request $request): JsonResponse
+    {
+        $today = now()->startOfDay();
+
+        $rooms = Room::with([
+            'property:id,name',
+            'currentResidents' => fn($query) => $query->where('role', 'representative')->with('tenant:id,full_name,phone'),
+            'leases' => fn($query) => $query->where('status', 'active')->with(['invoices.allocations']),
+        ])
+            ->whereHas('property', fn($query) => $query->where('user_id', $request->user()->id))
+            ->when($request->filled('property_id'), fn($query) => $query->where('property_id', $request->integer('property_id')))
+            ->whereHas('leases', fn($query) => $query->where('status', 'active'))
+            ->get();
+
+        $debtors = collect();
+
+        foreach ($rooms as $room) {
+            $lease = $room->leases->first();
+            if (!$lease) continue;
+
+            $representative = $room->currentResidents->first();
+            $tenant = $representative ? $representative->tenant : null;
+
+            $invoices = $lease->invoices;
+            $totalInvoices = $invoices->count();
+            if ($totalInvoices === 0) continue;
+
+            $latePaymentCount = 0;
+            $currentOverdueAmount = 0;
+            $totalUnpaidAmount = 0;
+            $textDetails = []; // Mảng lưu chi tiết từng vi phạm
+
+            foreach ($invoices as $invoice) {
+                if ($invoice->remaining_amount > 0) {
+                    $totalUnpaidAmount += $invoice->remaining_amount;
+                }
+
+                if (!$invoice->due_date) continue;
+                $dueDate = \Carbon\Carbon::parse($invoice->due_date)->startOfDay();
+
+                $isLate = false;
+
+                // 1. ĐANG NỢ QUÁ HẠN HIỆN TẠI
+                if ($invoice->remaining_amount > 0 && $today->gt($dueDate)) {
+                    $isLate = true;
+                    $currentOverdueAmount += $invoice->remaining_amount;
+
+                    //difInDays dùng để tính số ngày quá hạn
+                    $daysOverdue = $today->diffInDays($dueDate);
+                    $formattedAmount = number_format((float)$invoice->remaining_amount, 0, ',', '.');
+
+                    $textDetails[] = "HĐ {$invoice->invoice_code}: Đang nợ {$formattedAmount}đ (Quá hạn {$daysOverdue} ngày)";
+                }
+                // 2. LỊCH SỬ TỪNG TRẢ TRỄ
+                elseif ($invoice->paid_amount > 0) {
+                    $lastPayment = $invoice->allocations->max('allocated_at');
+                    if ($lastPayment) {
+
+                        $lastPaymentDate = \Carbon\Carbon::parse($lastPayment)->startOfDay();
+                        if ($lastPaymentDate->gt($dueDate)) {
+                            $isLate = true;
+                            $daysLate = $lastPaymentDate->diffInDays($dueDate);
+                            $textDetails[] = "HĐ {$invoice->invoice_code}: Đã đóng trễ ({$daysLate} ngày)";
+                        }
+                    }
+                }
+
+                if ($isLate) {
+                    $latePaymentCount++;
+                }
+            }
+
+            // ĐIỀU KIỆN ĐƯA VÀO DANH SÁCH ĐEN: Đang có nợ quá hạn HOẶC từng trễ từ 2 lần trở lên
+            if ($currentOverdueAmount > 0 || $latePaymentCount >= 2) {
+                $debtors->push([
+                    'room_id' => $room->id,
+                    'room_name' => $room->name,
+                    'property_name' => $room->property->name ?? 'Không xác định',
+                    'tenant_name' => $tenant ? $tenant->full_name : 'Khách thuê (Không xác định)',
+                    'tenant_phone' => $tenant ? $tenant->phone : 'N/A',
+                    'total_unpaid_amount' => $totalUnpaidAmount,
+                    'current_overdue_amount' => $currentOverdueAmount,
+                    'late_payment_count' => $latePaymentCount,
+                    'violation_details' => $textDetails, // Đẩy mảng chi tiết ra API
+                ]);
+            }
+        }
+
+        $debtors = $debtors->sortByDesc('current_overdue_amount')->sortByDesc('late_payment_count')->values();
+
+        return response()->json([
+            'success' => true,
+            'data' => $debtors,
+            'summary' => [
+                'total_overdue_amount' => $debtors->sum('current_overdue_amount'),
+                'total_bad_tenants' => $debtors->count(),
+            ]
+        ]);
     }
 }
