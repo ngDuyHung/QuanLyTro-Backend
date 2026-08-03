@@ -69,6 +69,10 @@ return new class extends Migration
                 ->nullable()
                 ->comment('Mô tả thêm về phòng (tiện nghi, nội thất, quy định riêng)');
 
+            $table->json('amenities')
+                ->nullable()
+                ->comment('Danh sách tiện ích của phòng (VD: ["air_conditioner", "balcony"])');
+
             $table->timestamps();
 
             $table->unique(['property_id', 'name'], 'uq_property_room_name');

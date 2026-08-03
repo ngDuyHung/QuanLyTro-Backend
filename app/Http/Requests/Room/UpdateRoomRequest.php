@@ -41,6 +41,9 @@ class UpdateRoomRequest extends FormRequest
             'status' => ['sometimes', new Enum(RoomStatus::class), 'in:available,maintenance'],
             'description'   => ['sometimes', 'nullable', 'string'],
 
+            'amenities'   => ['nullable', 'array'],
+            'amenities.*' => ['string', 'max:50'],
+
             'images' => ['nullable', 'array', 'max:5'],
             'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
 

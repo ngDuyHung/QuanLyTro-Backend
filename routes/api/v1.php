@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\V1\IncidentController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OcrController;
+use App\Http\Controllers\Api\V1\PublicRoomController;
 use App\Http\Controllers\Api\V1\PushSubscriptionController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\RoomReservationController;
@@ -322,6 +323,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/{member}', [TenantMemberController::class, 'update']);
         Route::delete('/{member}', [TenantMemberController::class, 'destroy']);
     });
+});
+
+// ── PUBLIC ROOM SEARCH (Không cần Auth) ────────────────────────────────────
+Route::prefix('public')->name('public.')->group(function () {
+    Route::get('/rooms', [PublicRoomController::class, 'index'])->name('rooms.index');
+    Route::get('/rooms/{id}', [PublicRoomController::class, 'show'])->name('rooms.show');
 });
 
 // 1. THÊM ROUTE WEBHOOK VÀO PHẦN PUBLIC (Nằm ngoài auth:sanctum)

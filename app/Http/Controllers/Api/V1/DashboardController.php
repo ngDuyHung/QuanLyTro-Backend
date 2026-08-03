@@ -27,7 +27,7 @@ class DashboardController extends Controller
         return response()->json([
             'success' => true,
             'data' => $data,
-            'Clear-Site-Data' => '"cache"'
+            
         ]);
     }
 

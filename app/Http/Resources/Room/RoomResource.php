@@ -40,6 +40,8 @@ class RoomResource extends JsonResource
             'status_label' => $this->status?->label(),
 
             'description' => $this->description,
+            
+            'amenities' => $this->amenities ?? [],
 
             'created_at' => $this->created_at?->toISOString(),
 

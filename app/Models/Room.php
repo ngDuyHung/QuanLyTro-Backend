@@ -31,6 +31,7 @@ class Room extends Model
         'is_public', // Có đăng phòng lên trang công khai hay không
         'status',
         'description',
+        'amenities',
 
     ];
 
@@ -44,6 +45,7 @@ class Room extends Model
         'allow_shared'  => 'boolean',
         'is_public'     => 'boolean',
         'status'        => RoomStatus::class,
+        'amenities'     => 'array',
         'created_at'    => 'datetime',
         'updated_at'    => 'datetime',
     ];
