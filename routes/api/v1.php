@@ -214,6 +214,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('ocr/scan-meter', [OcrController::class, 'scanMeter'])->name('ocr.scan-meter');
 
     // ── Utilities (Quản lý chỉ số Điện / Nước) ─────────────────────────────────
+    Route::get('utilities/analysis', [UtilityController::class, 'analysis'])->name('utilities.analysis');
     Route::apiResource('utilities', UtilityController::class);
 
     // ── SePay Config (Cấu hình SePay) ─────────────────────────────────────────────

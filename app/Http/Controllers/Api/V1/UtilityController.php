@@ -9,6 +9,7 @@ use App\Http\Requests\Utility\StoreUtilityRequest;
 use App\Http\Requests\Utility\UpdateUtilityRequest;
 use App\Http\Resources\Utility\UtilityResource;
 use App\Models\MeterReading;
+use App\Models\Room;
 use App\Services\UtilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,7 +27,7 @@ class UtilityController extends Controller
     public function index(Request $request): JsonResponse
     {
         $readings = MeterReading::with([
-            'lease.room.property', 
+            'lease.room.property',
             'lease.tenant:id,full_name'
         ])
             ->whereHas('lease.room.property', fn($q) => $q->where('user_id', $request->user()->id))
@@ -37,7 +38,7 @@ class UtilityController extends Controller
             ->when($request->month, function ($q) use ($request) {
                 // Filter theo tháng (Định dạng YYYY-MM)
                 $q->whereMonth('reading_date', substr((string)$request->month, 5, 2))
-                  ->whereYear('reading_date', substr((string)$request->month, 0, 4));
+                    ->whereYear('reading_date', substr((string)$request->month, 0, 4));
             })
             ->latest('reading_date')
             ->latest('id')
@@ -104,5 +105,28 @@ class UtilityController extends Controller
         $this->utilityService->deleteReading($reading);
 
         return response()->json(['message' => 'Đã xóa chỉ số thành công.']);
+    }
+
+    /**
+     * API Phân tích tiêu thụ 6 tháng gần nhất (Phục vụ vẽ biểu đồ).
+     */
+    public function analysis(Request $request): JsonResponse
+    {
+        $request->validate([
+            'room_id' => ['required', 'integer', 'exists:rooms,id'],
+            'type' => ['required', 'in:electricity,water'],
+        ]);
+
+        // 1. Kiểm tra Ownership: Khu nhà của phòng này có thuộc chủ trọ đang đăng nhập không?
+        $room = Room::whereHas('property', fn($q) => $q->where('user_id', $request->user()->id))
+            ->findOrFail($request->room_id);
+
+        // 2. Chuyển logic tính toán xuống Service
+        $data = $this->utilityService->analyze6Months($room->id, $request->type);
+
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+        ]);
     }
 }

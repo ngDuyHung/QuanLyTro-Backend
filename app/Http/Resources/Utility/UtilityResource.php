@@ -34,6 +34,7 @@ class UtilityResource extends JsonResource
             'room_name' => $this->lease?->room?->name ?? '—',
             'property_name' => $this->lease?->room?->property?->name ?? '—',
             'property_id' => $this->lease?->room?->property_id ?? null,
+            'room_id' => $this->lease?->room_id ?? null,
             'tenant_name' => $this->lease?->tenant?->full_name ?? '—',
         ];
     }

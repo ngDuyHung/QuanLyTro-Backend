@@ -108,4 +108,83 @@ class UtilityService
 
         $reading->delete();
     }
+
+    /**
+     * Phân tích chỉ số tiêu thụ 6 kỳ gần nhất của một phòng.
+     * Tính trung bình động và trả về dữ liệu biểu đồ.
+     */
+    public function analyze6Months(int $roomId, string $type): array
+    {
+        // 1. Lấy 6 bản ghi chốt số gần nhất của phòng này
+        $readings = MeterReading::whereHas('lease', fn($q) => $q->where('room_id', $roomId))
+            ->where('type', $type)
+            ->orderByDesc('reading_date')
+            ->orderByDesc('id')
+            ->limit(6)
+            ->get();
+
+        // Nếu phòng chưa có dữ liệu chốt số nào
+        if ($readings->isEmpty()) {
+            return [
+                'summary' => [
+                    'has_data' => false,
+                    'message' => 'Phòng này chưa có dữ liệu chốt số.',
+                ],
+                'chart_data' => []
+            ];
+        }
+
+        // 2. Đảo ngược mảng để sắp xếp theo thời gian tăng dần (Phục vụ vẽ Chart từ trái qua phải)
+        $chronologicalReadings = $readings->reverse()->values();
+
+        $chartData = [];
+        $totalUsage = 0;
+        $count = $chronologicalReadings->count();
+
+        // 3. Xây dựng mảng Chart Data và tính Tổng tiêu thụ
+        foreach ($chronologicalReadings as $reading) {
+            $usage = max(0, $reading->current_reading - $reading->previous_reading);
+            $totalUsage += $usage;
+
+            $chartData[] = [
+                'month' => \Carbon\Carbon::parse($reading->reading_date)->format('m/Y'),
+                'usage' => $usage,
+                'reading_date' => $reading->reading_date,
+            ];
+        }
+
+        // 4. Tính toán Trung bình cộng và Độ lệch của tháng hiện tại
+        $average = $count > 0 ? round($totalUsage / $count, 1) : 0;
+        $currentUsage = $chartData[$count - 1]['usage']; // Tháng mới nhất
+
+        $differenceValue = $currentUsage - $average;
+        $differencePercent = $average > 0 ? round(($differenceValue / $average) * 100, 1) : 0;
+
+        // 5. Đánh giá trạng thái (Business Logic)
+        $status = 'normal';
+        $message = 'Mức tiêu thụ bình thường, ổn định.';
+
+        // Cảnh báo nếu biến động quá 15% so với mức trung bình
+        if ($differencePercent >= 15) {
+            $status = 'warning_high';
+            $message = 'Tăng đột biến ' . abs($differencePercent) . '% so với mức trung bình.';
+        } elseif ($differencePercent <= -15) {
+            $status = 'warning_low';
+            $message = 'Giảm ' . abs($differencePercent) . '% so với mức trung bình.';
+        }
+
+        return [
+            'summary' => [
+                'has_data' => true,
+                'average_6_months' => $average,
+                'current_usage' => $currentUsage,
+                'difference_value' => round($differenceValue, 1),
+                'difference_percent' => $differencePercent,
+                'status' => $status,
+                'message' => $message,
+                'data_count' => $count,
+            ],
+            'chart_data' => $chartData
+        ];
+    }
 }
