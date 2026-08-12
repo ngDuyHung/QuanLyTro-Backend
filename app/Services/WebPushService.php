@@ -12,13 +12,14 @@ class WebPushService
 
     public function __construct()
     {
-        // 1. Lấy subject từ env, nếu bị cache (null) thì lấy url hệ thống làm fallback dự phòng
-        $subject = env('VAPID_SUBJECT');
+        // Sử dụng config() thay vì env() để tránh lỗi khi production bị cache
+        $subject = config('services.webpush.subject');
+
         if (empty($subject)) {
-            $subject = env('APP_URL', 'https://duyhung.io.vn');
+            $subject = config('app.url', 'https://duyhung.io.vn');
         }
 
-        // 2. Fix tự động: Nếu là email nhưng quên gõ chữ "mailto:", hệ thống tự thêm vào
+        // Fix tự động: Nếu là email nhưng quên gõ chữ "mailto:", hệ thống tự thêm vào
         if (!str_starts_with($subject, 'mailto:') && !str_starts_with($subject, 'http://') && !str_starts_with($subject, 'https://')) {
             $subject = 'mailto:' . $subject;
         }
@@ -26,14 +27,14 @@ class WebPushService
         $auth = [
             'VAPID' => [
                 'subject' => $subject,
-                'publicKey' => env('VAPID_PUBLIC_KEY'),
-                'privateKey' => env('VAPID_PRIVATE_KEY'),
+                'publicKey' => config('services.webpush.public_key'),
+                'privateKey' => config('services.webpush.private_key'),
             ],
         ];
 
         // Khởi tạo thư viện
         $this->webPush = new WebPush($auth);
-        
+
         // Tùy chọn: Set timeout nếu share hosting của bạn chậm
         $this->webPush->setReuseVAPIDHeaders(true);
     }

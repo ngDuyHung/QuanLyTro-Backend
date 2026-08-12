@@ -90,12 +90,19 @@ jobs:
             # lệnh migrate:fresh sẽ xóa toàn bộ dữ liệu cũ, tạo lại bảng và chạy seeder.
             # php artisan migrate:fresh --seed --force
 
+            # 1. Dọn sạch toàn bộ cache cũ trước (Quan trọng)
+            php artisan optimize:clear
+            php artisan cache:clear
+
+            # 2. Chạy Migration và Link Storage
             php artisan migrate --force
             php artisan storage:link || true
-            php artisan config:clear
+
+            # 3. Build lại toàn bộ Cache mới cho Production
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
+            php artisan event:cache
 
-            # 3. Chạy Seeder để đảm bảo các Role cốt lõi luôn tồn tại
+            # 4. Chạy Seeder
             php artisan db:seed --class=DatabaseSeeder --force
