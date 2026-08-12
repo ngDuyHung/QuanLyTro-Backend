@@ -12,9 +12,20 @@ class WebPushService
 
     public function __construct()
     {
+        // 1. Lấy subject từ env, nếu bị cache (null) thì lấy url hệ thống làm fallback dự phòng
+        $subject = env('VAPID_SUBJECT');
+        if (empty($subject)) {
+            $subject = env('APP_URL', 'https://duyhung.io.vn');
+        }
+
+        // 2. Fix tự động: Nếu là email nhưng quên gõ chữ "mailto:", hệ thống tự thêm vào
+        if (!str_starts_with($subject, 'mailto:') && !str_starts_with($subject, 'http://') && !str_starts_with($subject, 'https://')) {
+            $subject = 'mailto:' . $subject;
+        }
+
         $auth = [
             'VAPID' => [
-                'subject' => env('VAPID_SUBJECT'),
+                'subject' => $subject,
                 'publicKey' => env('VAPID_PUBLIC_KEY'),
                 'privateKey' => env('VAPID_PRIVATE_KEY'),
             ],
@@ -32,7 +43,7 @@ class WebPushService
      */
     public function sendNotifications($subscriptions, array $payloadData): void
     {
-        $payload = json_encode($payloadData); // Dữ liệu sẽ đẩy xuống React Service Worker
+        $payload = json_encode($payloadData);
 
         foreach ($subscriptions as $sub) {
             $subscription = Subscription::create([
