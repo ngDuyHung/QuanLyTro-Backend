@@ -271,7 +271,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/ledger/export/excel', [App\Http\Controllers\Api\V1\ReportController::class, 'exportLedgerExcel'])->name('ledger.export.excel');
     });
 
-    // ── Web Push Notifications (Thông báo đẩy) ───────────────────────────────
+    // ── Web Push Notifications(Thông báo đẩy) ───────────────────────────────
     Route::post('/push/subscribe', [PushSubscriptionController::class, 'subscribe']);
     Route::post('/push/unsubscribe', [PushSubscriptionController::class, 'unsubscribe']);
 
