@@ -61,15 +61,21 @@ class UtilityService
      */
     public function updateReading(MeterReading $reading, array $data): MeterReading
     {
+        // Không cho sửa nếu đã được gắn vào một hóa đơn
         if ($reading->invoice_id) {
             throw new BusinessException('Không thể sửa chỉ số điện/nước đã được chốt vào hóa đơn.');
         }
 
-        if (isset($data['current_reading']) && $data['current_reading'] < $reading->previous_reading) {
-            throw new BusinessException("Chỉ số mới không được nhỏ hơn chỉ số cũ ({$reading->previous_reading}).");
+        // Lấy số cũ mới truyền lên (nếu có), nếu không có thì giữ số cũ hiện tại
+        $newPrevious = $data['previous_reading'] ?? $reading->previous_reading;
+
+        // Kiểm tra số mới so với số cũ (đã cập nhật)
+        if (isset($data['current_reading']) && $data['current_reading'] < $newPrevious) {
+            throw new BusinessException("Chỉ số mới không được nhỏ hơn chỉ số cũ ({$newPrevious}).");
         }
 
-        // Cập nhật các field cơ bản
+        // Cập nhật các field cơ bản (Bao gồm cả số cũ)
+        $reading->previous_reading = $newPrevious;
         $reading->current_reading = $data['current_reading'] ?? $reading->current_reading;
         $reading->reading_date = $data['reading_date'] ?? $reading->reading_date;
 
@@ -83,7 +89,7 @@ class UtilityService
             $ext = $data['meter_image']->extension();
             $reading->meter_image = $data['meter_image']->storeAs(
                 "utilities/lease_{$reading->lease_id}",
-                "{$reading->type}_" . time() . ".{$ext}",
+                "{$reading->type->value}_" . time() . ".{$ext}",
                 'public'
             );
         }

@@ -93,7 +93,7 @@ class TenantUtilityService
             throw new BusinessException('Phòng của bạn đã được chốt chỉ số trong kỳ này. Nếu có sai sót, vui lòng báo lại cho quản lý.');
         }
 
-        DB::transaction(function() use ($lease, $data, $elecImage, $waterImage) {
+        DB::transaction(function () use ($lease, $data, $elecImage, $waterImage) {
             // 1. Chốt Điện
             if (isset($data['electricity_reading']) && $data['electricity_reading'] !== '') {
                 $this->utilityService->createReading([

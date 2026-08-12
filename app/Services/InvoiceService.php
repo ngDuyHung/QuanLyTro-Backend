@@ -431,8 +431,10 @@ class InvoiceService
 
             // Xử lý số liệu và ảnh
             $isChotRoi = $unbilledReadings->has($type);
+            $readingId = null;
             if ($isChotRoi) {
                 $reading = $unbilledReadings->get($type);
+                $readingId = $reading->id;
                 $prev = $reading->previous_reading;
                 $current = $reading->current_reading;
                 // Tạo URL ảnh đầy đủ (Tùy cấu hình storage của bạn)
@@ -445,6 +447,7 @@ class InvoiceService
             }
 
             return [
+                'reading_id' => $readingId,
                 'prev' => $prev,
                 'current' => $current,
                 'price' => $unitPrice,
