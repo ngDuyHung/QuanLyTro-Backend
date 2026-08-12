@@ -39,7 +39,7 @@ class NotificationResource extends JsonResource
             'target_type' => $this->target_type,
             'target_type_label' => $targetTypeLabel, // Trả về biến đã xử lý ở trên
             'target_id' => $this->target_id,
-
+            'action_url' => $this->action_url,
             'is_pinned' => $this->is_pinned,
 
             'status' => $this->status,

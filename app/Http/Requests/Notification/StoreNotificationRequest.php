@@ -29,6 +29,7 @@ class StoreNotificationRequest extends FormRequest
                 'nullable',
                 'integer'
             ],
+            'action_url' => ['nullable', 'string', 'max:255'],
             'is_pinned'   => ['nullable', 'boolean'],
             'status'      => ['required', Rule::in(['draft', 'published'])],
         ];

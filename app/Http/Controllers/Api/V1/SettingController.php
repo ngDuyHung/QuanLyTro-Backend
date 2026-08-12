@@ -10,6 +10,9 @@ use App\Http\Requests\Setting\ExportLedgerPdfRequest;
 use App\Http\Requests\Setting\SaveContractTemplateRequest;
 use App\Http\Requests\Setting\SaveLedgerTemplateRequest;
 use App\Http\Resources\Setting\SettingResource;
+use App\Models\Lease;
+use App\Models\MeterReading;
+use App\Models\Notification;
 use App\Models\PushSubscription;
 use App\Models\Setting;
 use App\Services\SettingService;
@@ -213,5 +216,87 @@ class SettingController extends Controller
         $webPushService->sendNotifications($subscriptions, $payload);
 
         return response()->json(['message' => 'Đã gửi thông báo test thành công. Vui lòng kiểm tra màn hình thiết bị.']);
+    }
+
+    /**
+     * API: Ép chạy luồng nhắc nhở chốt điện nước (Dành cho Demo/Test)
+     */
+    public function forceRemindUtilityReadings(Request $request, WebPushService $webPushService)
+    {
+        $landlordId = $request->user()->id;
+        $currentMonth = now()->format('Y-m'); // Dùng tháng hiện tại để test
+
+        // 1. Lấy tất cả hợp đồng ĐANG ACTIVE của CHÍNH CHỦ TRỌ NÀY
+        $leases = Lease::with(['tenant', 'room'])
+            ->whereHas('room.property', fn($q) => $q->where('user_id', $landlordId))
+            ->where('status', 'active')
+            ->get();
+
+        $userIdsToNotify = [];
+        $notificationsToInsert = [];
+
+        foreach ($leases as $lease) {
+            if (!$lease->tenant || !$lease->tenant->user_id) continue;
+
+            // Kiểm tra xem phòng này đã chốt chỉ số tháng hiện tại chưa
+            $hasReading = MeterReading::where('lease_id', $lease->id)
+                ->where('reading_date', 'like', $currentMonth . '%')
+                ->exists();
+
+            // Kiểm tra xem đã từng bị test push trong tháng này chưa
+            $hasNotified = Notification::where('target_id', $lease->room_id)
+                ->where('target_type', 'room')
+                ->where('type', 'system')
+                ->where('title', 'like', '%[TEST LỤẬN VĂN]%') // Gắn flag để dễ phân biệt
+                ->whereMonth('created_at', now()->month)
+                ->whereYear('created_at', now()->year)
+                ->exists();
+
+            if (!$hasReading && !$hasNotified) {
+                $userId = $lease->tenant->user_id;
+                $userIdsToNotify[] = $userId;
+
+                $notificationsToInsert[] = [
+                    'user_id' => $landlordId,
+                    'title' => "[TEST] Đã đến hạn chốt điện/nước phòng {$lease->room->name}",
+                    'content' => "Đây là thông báo demo từ hệ thống. Vui lòng nhập chỉ số điện nước.",
+                    'type' => 'system', // Phân loại vào tab Hệ thống
+                    'target_type' => 'room',
+                    'target_id' => $lease->room_id,
+                    'action_url' => '/tenant/utilities?action=submit_reading',
+                    'status' => 'published',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+        }
+
+        if (empty($userIdsToNotify)) {
+            return response()->json([
+                'message' => 'Toàn bộ các phòng của bạn đã chốt chỉ số, hoặc đã được test thông báo trong tháng này. Không có ai để gửi thêm.'
+            ], 400);
+        }
+
+        // Insert vào bảng Notifications
+        Notification::insert($notificationsToInsert);
+
+        // Lấy Token và Bắn Push
+        $subscriptions = PushSubscription::whereIn('user_id', array_unique($userIdsToNotify))->get();
+        if ($subscriptions->isNotEmpty()) {
+            $payload = [
+                'title' => 'Chốt chỉ số điện nước (Demo) ⚡💧',
+                'body' => 'Hệ thống đang chạy test workflow. Nhấp vào đây để xem.',
+                'url' => '/tenant/utilities?action=submit_reading',
+                'icon' => '/icon.png'
+            ];
+
+            $webPushService->sendNotifications($subscriptions, $payload);
+        }
+
+        return response()->json([
+            'message' => 'Đã chạy luồng Test thành công!',
+            'reminded_rooms' => count($notificationsToInsert),
+            'push_sent' => $subscriptions->count()
+        ]);
     }
 }

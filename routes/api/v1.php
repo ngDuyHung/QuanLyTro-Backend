@@ -168,6 +168,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('settings/auto-remind', [SettingController::class, 'toggleAutoRemind']);
     Route::post('settings/test-push', [SettingController::class, 'testPushNotification']);
 
+    // API Test toàn bộ Workflow nhắc nợ
+    Route::post('settings/test-workflow-remind', [SettingController::class, 'forceRemindUtilityReadings']);
+
     // ── Financial Transactions (Thu chi) ─────────────────────────────────────
     Route::get('financial-transactions', [FinancialTransactionController::class, 'index'])
         ->name('financial-transactions.index');
@@ -235,6 +238,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     // ── Route Notifications (Thông báo) ─────────────────────────────────────────────
     Route::apiResource('notifications', NotificationController::class);
+    Route::post('notifications/{id}/resend-push', [NotificationController::class, 'resendPush'])->name('notifications.resend-push');
 
     // ── Accounting Ledger (Chốt sổ kế toán) ────────────────────────────────────
     Route::apiResource('accounting-ledgers', AccountingLedgerController::class)->except(['update']);

@@ -19,6 +19,7 @@ class Notification extends Model
         'type',
         'target_type',
         'target_id',
+        'action_url',
         'is_pinned',
         'status',
     ];

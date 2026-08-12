@@ -19,6 +19,7 @@ return new class extends Migration
             $table->string('type', 50)->default('info')->comment('Loại thông báo'); // info, warning, billing
             $table->string('target_type', 50)->default('all')->comment('Loại đối tượng mục tiêu (all, property, room)'); // all, property, room
             $table->unsignedBigInteger('target_id')->nullable()->comment('ID của property hoặc room (nếu có)');
+            $table->string('action_url', 255)->nullable()->comment('Đường dẫn mở khi click vào Web Push');
 
             $table->boolean('is_pinned')->default(false);
             $table->string('status', 50)->default('draft')->comment('Trạng thái thông báo'); // draft, published

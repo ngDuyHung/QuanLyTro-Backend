@@ -12,7 +12,6 @@ use App\Models\PushSubscription;
 use App\Models\Setting;
 use App\Services\WebPushService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class CronController extends Controller
 {
@@ -22,21 +21,20 @@ class CronController extends Controller
 
     public function remindUtilityReadings(Request $request)
     {
-        // 1. Bảo mật
         if ($request->header('X-Cron-Secret') !== env('CRON_SECRET', 'YOUR_SECRET_KEY')) {
             abort(403, 'Unauthorized');
         }
 
-        $targetDay = now()->addDays(3)->day;
-        $currentMonth = now()->format('Y-m'); // Định dạng yyyy-mm
+        // Lấy thông tin ngày, tháng chuẩn của kỳ thu tiền sắp tới
+        $targetDate = now()->addDays(3);
+        $targetDay = $targetDate->day;
+        $targetMonth = $targetDate->format('Y-m');
 
-        // LẤY DANH SÁCH CHỦ TRỌ ĐÃ "TẮT" TÍNH NĂNG NÀY
         $disabledLandlordIds = Setting::where('key', 'auto_remind_utility')
             ->where('value', 'false')
             ->pluck('user_id')
             ->toArray();
 
-        // 2. Lấy hợp đồng cần nhắc (Thêm 'room.property' để lấy được user_id của chủ trọ )
         $leases = Lease::with(['tenant', 'room.property'])
             ->where('status', 'active')
             ->where('billing_day', $targetDay)
@@ -47,41 +45,39 @@ class CronController extends Controller
 
         foreach ($leases as $lease) {
             if (!$lease->tenant || !$lease->tenant->user_id) continue;
-            
+
             $landlordId = $lease->room->property->user_id;
 
-            // NẾU CHỦ TRỌ TẮT TÍNH NĂNG -> BỎ QUA KHÔNG NHẮC NHỞ
             if (in_array($landlordId, $disabledLandlordIds)) {
                 continue;
             }
 
-            // 1. Kiểm tra xem ĐÃ CHỐT CHỈ SỐ tháng này chưa
+            // Check số điện nước theo $targetMonth
             $hasReading = MeterReading::where('lease_id', $lease->id)
-                ->where('reading_date', 'like', $currentMonth . '%')
+                ->where('reading_date', 'like', $targetMonth . '%')
                 ->exists();
 
-            // 2. KIỂM TRA ĐÃ GỬI THÔNG BÁO CHƯA (Chống trùng lặp tuyệt đối)
-            // Tìm xem trong tháng hiện tại, đã có thông báo loại 'billing' nào gửi đến phòng này chưa
+            // Check chống spam thông báo theo $targetDate
             $hasNotified = Notification::where('target_id', $lease->room_id)
                 ->where('target_type', 'room')
                 ->where('type', 'billing')
-                ->where('title', 'like', '%Đã đến hạn chốt điện/nước%') // Đảm bảo đúng loại thông báo
-                ->whereMonth('created_at', now()->month)
-                ->whereYear('created_at', now()->year)
+                ->where('title', 'like', '%Đã đến hạn chốt điện/nước%')
+                ->whereMonth('created_at', $targetDate->month)
+                ->whereYear('created_at', $targetDate->year)
                 ->exists();
 
-            // CHỈ GỬI KHI: Chưa chốt chỉ số VÀ Chưa từng gửi thông báo nhắc nhở trong tháng này
             if (!$hasReading && !$hasNotified) {
                 $userId = $lease->tenant->user_id;
                 $userIdsToNotify[] = $userId;
 
                 $notificationsToInsert[] = [
-                    'user_id' => $userId,
+                    'user_id' => $landlordId, // Thông báo này tạo dưới danh nghĩa chủ trọ
                     'title' => "Đã đến hạn chốt điện/nước phòng {$lease->room->name}",
                     'content' => "Vui lòng nhập chỉ số điện nước của tháng này để hệ thống tạo hóa đơn.",
-                    'type' => 'billing',
+                    'type' => 'system',
                     'target_type' => 'room',
                     'target_id' => $lease->room_id,
+                    'action_url' => '/tenant/utilities?action=submit_reading', // Gắn link deep-link
                     'status' => 'published',
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -93,19 +89,17 @@ class CronController extends Controller
             return response()->json(['message' => 'Không có phòng nào cần nhắc nhở.']);
         }
 
-        // 3. Insert thông báo vào DB hệ thống
+        // Insert vào DB tốc độ cao
         Notification::insert($notificationsToInsert);
 
-        // 4. Lấy tất cả Device Token của các user cần nhắc
-        $subscriptions = PushSubscription::whereIn('user_id', $userIdsToNotify)->get();
-
-        // 5. Bắn Push Notification xuống thiết bị qua WebPushService
+        // Gọi đồng bộ Push Notifications
+        $subscriptions = PushSubscription::whereIn('user_id', array_unique($userIdsToNotify))->get();
         if ($subscriptions->isNotEmpty()) {
             $payload = [
                 'title' => 'Chốt chỉ số điện nước ⚡💧',
                 'body' => 'Vui lòng nhập chỉ số điện nước để chốt hóa đơn kỳ này.',
-                'url' => '/utilities', // Đường dẫn Frontend PWA sẽ mở khi click vào thông báo
-                'icon' => '/icon.png' // Icon ứng dụng của bạn
+                'url' => '/tenant/utilities?action=submit_reading',
+                'icon' => '/icon.png'
             ];
 
             $this->webPushService->sendNotifications($subscriptions, $payload);
