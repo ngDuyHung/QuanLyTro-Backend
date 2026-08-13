@@ -10,8 +10,10 @@ use App\Models\Lease;
 use App\Models\LeaseMember;
 use App\Models\RoomResident;
 use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
@@ -26,14 +28,17 @@ class TenantService
 
         try {
             return DB::transaction(function () use ($data, &$storedPaths): Tenant {
-                $tenant = Tenant::create([
-                    'full_name' => $data['full_name'],
-                    'email' => $data['email'] ?? null,
-                    'phone' => $data['phone'],
-                    'id_card_number' => $data['id_card_number'],
-                    'user_id' => $data['user_id'] ?? null,
-                ]);
-
+                $tenant = Tenant::updateOrCreate(
+                    // Điều kiện tìm kiếm (Ưu tiên CCCD, nếu nhập tay không có thì dùng SĐT)
+                    ['id_card_number' => $data['id_card_number']],
+                    // Dữ liệu sẽ update hoặc create
+                    [
+                        'full_name' => $data['full_name'],
+                        'email' => $data['email'] ?? null,
+                        'phone' => $data['phone'],
+                        'user_id' => $data['user_id'] ?? null,
+                    ]
+                );
                 $imageUpdates = [];
 
                 if (
@@ -158,7 +163,7 @@ class TenantService
     {
         $residence = $tenant->roomResidents()
             ->whereIn('status', ['pending', 'active'])
-            ->whereHas('room.property', fn ($query) => $query->where('user_id', $ownerId))
+            ->whereHas('room.property', fn($query) => $query->where('user_id', $ownerId))
             ->latest()
             ->first();
 
@@ -213,5 +218,25 @@ class TenantService
         $tenantId = $tenant instanceof Tenant ? $tenant->id : $tenant;
 
         Storage::disk('public')->deleteDirectory("tenants/{$tenantId}");
+    }
+
+    /**
+     * Khôi phục mật khẩu của khách thuê về mặc định (Số điện thoại)
+     */
+    public function resetTenantPassword(Tenant $tenant): void
+    {
+        if (!$tenant->user_id) {
+            throw new BusinessException('Khách thuê này chưa được cấp tài khoản hệ thống.');
+        }
+
+        $user = User::find($tenant->user_id);
+
+        if (!$user) {
+            throw new BusinessException('Không tìm thấy dữ liệu tài khoản đăng nhập.');
+        }
+
+        // Đặt lại mật khẩu thành số điện thoại của Tenant
+        $user->password = Hash::make($tenant->phone);
+        $user->save();
     }
 }

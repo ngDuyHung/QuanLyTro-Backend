@@ -177,7 +177,27 @@ class AuthService
         $user->assignRole('tenant');
 
         return $user;
-    } 
+    }
+
+    /**
+     * Lấy tài khoản Tenant đã có hoặc tạo mới nếu chưa tồn tại (chống trùng SĐT)
+     */
+    public function getOrCreateTenantUser(array $data): User
+    {
+        $phone = $data['phone'];
+
+        $user = User::where('phone', $phone)->first();
+
+        if (!$user) {
+            $data['password']  = Hash::make($data['password'] ?? $phone);
+            $data['is_active'] = true;
+
+            $user = User::create($data);
+            $user->assignRole('tenant');
+        }
+
+        return $user;
+    }
 
     public function logout(User $user): void
     {

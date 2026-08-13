@@ -18,6 +18,7 @@ use App\Services\TenantService;
 use App\Http\Requests\Tenant\StoreTenantRequest;
 use App\Models\Lease;
 use App\Models\Room;
+use App\Services\AuthService;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -25,7 +26,8 @@ class TenantController extends Controller
 {
 
     public function __construct(
-        private readonly TenantService $tenantService
+        private readonly TenantService $tenantService,
+        private readonly AuthService $authService
     ) {}
     /**
      * Lấy danh sách khách thuê (search tên/SĐT/CCCD, phân trang).
@@ -200,6 +202,15 @@ class TenantController extends Controller
                 if (!$lease) {
                     throw new BusinessException('Phòng này chưa có hợp đồng đang hiệu lực. Vui lòng tạo hợp đồng trước khi thêm khách thuê.');
                 }
+                // --- CẤP TÀI KHOẢN TỰ ĐỘNG ---
+                $accountTenant = $this->authService->getOrCreateTenantUser([
+                    'name'      => $data['full_name'],
+                    'phone'     => $data['phone'],
+                    'email'     => $data['email'] ?? null,
+                    'password'  => $data['phone'], // Mặc định pass là SĐT
+                ]);
+                $data['user_id'] = $accountTenant->id; // Gắn user_id vào data để tạo Profile
+                // ------------------------------------
 
                 $tenant = $this->tenantService->createProfile($data);
                 $createdTenantId = $tenant->id;
@@ -254,5 +265,24 @@ class TenantController extends Controller
         return (new TenantResource($tenant))
             ->additional(['message' => 'Đã ghi nhận khách thuê rời phòng.'])
             ->response();
+    }
+
+    /**
+     * Khôi phục mật khẩu khách thuê
+     */
+    public function resetPassword(Request $request, int $id): JsonResponse
+    {
+        // 1. Kiểm tra ownership: Chủ trọ chỉ được thao tác với khách của mình
+        $tenant = Tenant::whereHas(
+            'roomResidents.room.property',
+            fn($query) => $query->where('user_id', $request->user()->id)
+        )->findOrFail($id);
+
+        // 2. Gọi Service thực thi
+        $this->tenantService->resetTenantPassword($tenant);
+
+        return response()->json([
+            'message' => 'Đã khôi phục mật khẩu mặc định (Số điện thoại) thành công.'
+        ]);
     }
 }

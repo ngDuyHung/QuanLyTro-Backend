@@ -22,9 +22,9 @@ class StoreTenantRequest extends FormRequest
 
             // Thông tin khách thuê
             'full_name' => ['required', 'string', 'max:100'],
-            'email' => ['nullable', 'email', 'max:255', 'unique:tenants,email'],
-            'phone' => ['required', 'string', 'regex:/^[0-9]{9,15}$/', 'unique:tenants,phone'],
-            'id_card_number' => ['required', 'string', 'max:20', 'unique:tenants,id_card_number'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'phone' => ['required', 'string', 'regex:/^[0-9]{9,15}$/'],
+            'id_card_number' => ['required', 'string', 'max:20'],
             'id_card_front_image' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'id_card_back_image' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
 

@@ -61,7 +61,7 @@ class LeaseService
                 }
 
                 //Tạo tài khoản cho khách đại diện hợp đồng
-                $accountTenat =  $this->authService->registerTenant([
+                $accountTenat =  $this->authService->getOrCreateTenantUser([
                     'name' => $data['tenant']['full_name'],
                     'phone'     => $data['tenant']['phone'],
                     'email'     => $data['tenant']['email'],
@@ -233,7 +233,7 @@ class LeaseService
     public function createFromImport(int $roomId, array $data): Lease
     {
         // 1. Tạo tài khoản đăng nhập trước (tương tự createLease)
-        $accountTenant = $this->authService->registerTenant([
+        $accountTenant = $this->authService->getOrCreateTenantUser([
             'name'      => trim((string)$data['tenant_full_name']),
             'phone'     => preg_replace('/\D/', '', (string)$data['tenant_phone']),
             'email'     => !empty($data['tenant_email']) ? strtolower(trim((string)$data['tenant_email'])) : null,
@@ -352,13 +352,23 @@ class LeaseService
      */
     public function addRoommateFromImport(int $roomId, int $leaseId, array $data): void
     {
-        // 1. Tạo hoặc cập nhật thông tin hồ sơ của người ở ghép
+        // 1. TẠO TÀI KHOẢN HỆ THỐNG TRƯỚC
+        $accountTenant = $this->authService->getOrCreateTenantUser([
+            'name'      => trim((string)$data['tenant_full_name']),
+            'phone'     => preg_replace('/\D/', '', (string)$data['tenant_phone']),
+            'email'     => !empty($data['tenant_email']) ? strtolower(trim((string)$data['tenant_email'])) : null,
+            'password'  => preg_replace('/\D/', '', (string)$data['tenant_phone']),
+            'is_active' => true,
+        ]);
+
+        // 2. CẬP NHẬT HOẶC TẠO HỒ SƠ KHÁCH THUÊ 
         $tenant = Tenant::updateOrCreate(
             ['id_card_number' => trim((string)$data['tenant_id_card_number'])],
             [
                 'full_name' => trim((string)$data['tenant_full_name']),
                 'phone'     => preg_replace('/\D/', '', (string)$data['tenant_phone']),
                 'email'     => !empty($data['tenant_email']) ? strtolower(trim((string)$data['tenant_email'])) : null,
+                'user_id'   => $accountTenant->id, // Bổ sung dòng này
             ]
         );
 

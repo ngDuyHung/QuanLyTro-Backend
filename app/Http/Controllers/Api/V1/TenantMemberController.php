@@ -12,6 +12,7 @@ use App\Http\Resources\LeaseMember\LeaseMemberResource;
 use App\Models\Lease;
 use App\Models\LeaseMember;
 use App\Models\Tenant;
+use App\Services\AuthService;
 use App\Services\TenantService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,7 +22,8 @@ use Illuminate\Support\Facades\Storage;
 class TenantMemberController extends Controller
 {
     public function __construct(
-        private readonly TenantService $tenantService
+        private readonly TenantService $tenantService,
+        private readonly AuthService $authService
     ) {}
 
     /**
@@ -81,8 +83,20 @@ class TenantMemberController extends Controller
                 }
             }
 
-            // 2. Tạo Profile Tenant (tái sử dụng Core Service)
-            $tenant = $this->tenantService->createProfile($request->validated());
+            $data = $request->validated();
+
+            // --- BỔ SUNG: CẤP TÀI KHOẢN TỰ ĐỘNG ---
+            $accountTenant = $this->authService->getOrCreateTenantUser([
+                'name'      => $data['full_name'],
+                'phone'     => $data['phone'],
+                'email'     => $data['email'] ?? null,
+                'password'  => $data['phone'],
+            ]);
+            $data['user_id'] = $accountTenant->id;
+            // ------------------------------------
+
+            // 2. Tạo Profile Tenant (Đưa mảng $data đã có user_id vào)
+            $tenant = $this->tenantService->createProfile($data);
 
             // 3. Gắn vào phòng và hợp đồng (tái sử dụng Core Service)
             $this->tenantService->createMemberResidence(
@@ -125,7 +139,7 @@ class TenantMemberController extends Controller
         DB::transaction(function () use ($request, $data, $member, $tenantId) {
             // 1. Cập nhật thông tin bảng tenants (Tên, CCCD, Ảnh...)
             $tenant = $member->tenant;
-            
+
             if ($request->hasFile('id_card_front_image')) {
                 if ($tenant->id_card_front_image) Storage::disk('public')->delete($tenant->id_card_front_image);
                 $ext = $request->file('id_card_front_image')->extension();

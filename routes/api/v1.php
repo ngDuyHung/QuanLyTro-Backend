@@ -63,6 +63,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
     Route::get('auth/me', [AuthController::class, 'me'])->name('auth.me');
 
+    // --- Cập nhật Profile & Đổi mật khẩu ---
+    Route::put('auth/profile', [AuthController::class, 'updateProfile'])->name('auth.profile.update');
+    Route::put('auth/password', [AuthController::class, 'changePassword'])->name('auth.password.update');
+
     Route::apiResource('properties', PropertyController::class);
 
     // ── Rooms ──────────────────────────────────────────────────────────────
@@ -90,6 +94,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('tenants', [TenantController::class, 'store'])->name('tenants.store');
     Route::patch('tenants/{tenant}/leave', [TenantController::class, 'leave'])
         ->name('tenants.leave');
+    Route::post('tenants/{id}/reset-password', [TenantController::class, 'resetPassword'])->name('tenants.reset-password');
     Route::apiResource('tenants', TenantController::class)->except(['store']);
 
     // ── Leases (Hợp đồng thuê) ────────────────────────────────────────────
