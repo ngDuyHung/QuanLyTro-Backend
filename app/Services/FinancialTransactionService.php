@@ -9,6 +9,7 @@ use App\Models\FinancialTransaction;
 use App\Models\FinancialTransactionAllocation;
 use App\Models\Invoice;
 use App\Models\SePayTransaction;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -39,6 +40,13 @@ class FinancialTransactionService
 
             if ($amount > (int) $invoice->remaining_amount) {
                 throw new BusinessException('Số tiền thanh toán không được vượt quá số tiền còn nợ.');
+            }
+
+            $transactionDate = Carbon::parse($data['transaction_date'] ?? now());
+            $limitDate = Carbon::parse($invoice->issue_date ?? $invoice->period_from)->startOfDay();
+
+            if ($transactionDate->lt($limitDate)) {
+                throw new BusinessException('Ngày thu tiền không hợp lệ (không được trước ngày hóa đơn được phát hành).');
             }
 
             // Tách số tiền thanh toán thành phần DOANH THU THẬT và phần TIỀN THẾ CHÂN (nếu hóa đơn có dòng deposit)
