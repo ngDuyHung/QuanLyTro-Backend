@@ -52,6 +52,14 @@ class TenantController extends Controller
                         ->orWhere('id_card_number', 'like', $keyword);
                 });
             })
+
+            ->when($request->filled('property_id'), function ($query) use ($request): void {
+                $query->whereHas(
+                    'roomResidents.room',
+                    fn($sub) => $sub->where('property_id', $request->integer('property_id'))
+                );
+            })
+
             ->when($request->filled('room_id'), function ($query) use ($request): void {
                 $query->whereHas(
                     'roomResidents',
