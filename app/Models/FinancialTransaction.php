@@ -49,6 +49,7 @@ class FinancialTransaction extends Model
         'note',
 
         'created_by',
+        'tenant_name_snapshot',
     ];
 
     protected $casts = [

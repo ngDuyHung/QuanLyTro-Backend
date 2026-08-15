@@ -89,6 +89,9 @@ return new class extends Migration
                 ->constrained('tenants')
                 ->nullOnDelete();
 
+            $table->string('tenant_name_snapshot', 100)->nullable()
+                ->comment('Lưu vết tên khách thuê tại thời điểm phát sinh giao dịch');
+
             /*
              |--------------------------------------------------------------------------
              | Tài khoản ngân hàng

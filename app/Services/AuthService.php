@@ -179,22 +179,25 @@ class AuthService
         return $user;
     }
 
-    /**
-     * Lấy tài khoản Tenant đã có hoặc tạo mới nếu chưa tồn tại (chống trùng SĐT)
-     */
+    
     public function getOrCreateTenantUser(array $data): User
     {
         $phone = $data['phone'];
-
         $user = User::where('phone', $phone)->first();
 
-        if (!$user) {
-            $data['password']  = Hash::make($data['password'] ?? $phone);
-            $data['is_active'] = true;
-
-            $user = User::create($data);
-            $user->assignRole('tenant');
+        if ($user) {
+            // Chặn: SĐT đã có tài khoản, nhưng không phải tenant
+            if (!$user->hasRole('tenant')) {
+                throw new BusinessException('Số điện thoại này đã được đăng ký làm Chủ trọ hoặc Quản trị viên trên hệ thống. Không thể dùng số này để tạo hồ sơ khách thuê.');
+            }
+            return $user;
         }
+
+        $data['password']  = Hash::make($data['password'] ?? $phone);
+        $data['is_active'] = true;
+
+        $user = User::create($data);
+        $user->assignRole('tenant');
 
         return $user;
     }

@@ -94,11 +94,11 @@ return new class extends Migration
              |
              */
             $table->enum('invoice_type', [
-                    'monthly',
-                    'checkin',
-                    'checkout',
-                    'adjustment',
-                ])
+                'monthly',
+                'checkin',
+                'checkout',
+                'adjustment',
+            ])
                 ->default('monthly')
                 ->comment('Loại hóa đơn: monthly/checkin/checkout/adjustment');
 
@@ -168,13 +168,13 @@ return new class extends Migration
              |
              */
             $table->enum('status', [
-                    'draft',
-                    'issued',
-                    'partially_paid',
-                    'paid',
-                    'overdue',
-                    'cancelled',
-                ])
+                'draft',
+                'issued',
+                'partially_paid',
+                'paid',
+                'overdue',
+                'cancelled',
+            ])
                 ->default('draft')
                 ->index()
                 ->comment('Trạng thái hóa đơn: draft/issued/partially_paid/paid/overdue/cancelled');
@@ -289,6 +289,10 @@ return new class extends Migration
                 ->comment('FK users - người tạo hóa đơn, thường là chủ trọ')
                 ->constrained('users')
                 ->nullOnDelete();
+
+            $table->string('tenant_name_snapshot', 100)->nullable()->comment('Lưu vết tên khách thuê tại thời điểm lập HĐ');
+            $table->string('tenant_phone_snapshot', 20)->nullable()->comment('Lưu vết SĐT khách thuê tại thời điểm lập HĐ');
+            $table->string('room_name_snapshot', 50)->nullable()->comment('Lưu vết tên phòng tại thời điểm lập HĐ');
 
             $table->timestamps();
 

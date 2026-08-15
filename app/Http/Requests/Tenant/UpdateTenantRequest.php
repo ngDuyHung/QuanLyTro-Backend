@@ -16,26 +16,26 @@ class UpdateTenantRequest extends FormRequest
 
     public function rules(): array
     {
-        $tenantId = (int) $this->route('tenant');
-
+        // Lấy ID của khách thuê đang được chỉnh sửa trực tiếp từ param của route
+        $tenantId = $this->route('tenant') ?? $this->route('id');
+        
         return [
             'full_name' => ['sometimes', 'required', 'string', 'max:100'],
 
             'email' => ['nullable', 'email', 'max:255'],
 
+
             'phone' => [
-                'sometimes',
                 'required',
                 'string',
                 'regex:/^[0-9]{9,15}$/',
+                \Illuminate\Validation\Rule::unique('tenants', 'phone')->where('owner_id', $this->user()->id)->ignore($tenantId)
             ],
-
             'id_card_number' => [
-                'sometimes',
-                'required',
+                'nullable',
                 'string',
                 'max:20',
-                Rule::unique('tenants', 'id_card_number')->ignore($tenantId),
+                \Illuminate\Validation\Rule::unique('tenants', 'id_card_number')->where('owner_id', $this->user()->id)->ignore($tenantId)
             ],
 
             'id_card_front_image' => [
@@ -65,10 +65,10 @@ class UpdateTenantRequest extends FormRequest
             'email.email' => 'Email không hợp lệ.',
             'email.max' => 'Email không được vượt quá 255 ký tự.',
 
+            'phone.unique' => 'Số điện thoại này đã được khách thuê khác sử dụng trong hệ thống.',
             'phone.required' => 'Số điện thoại không được để trống.',
             'phone.regex' => 'Số điện thoại không hợp lệ (9–15 chữ số).',
 
-            'id_card_number.required' => 'Số CCCD/CMND không được để trống.',
             'id_card_number.max' => 'Số CCCD/CMND không được vượt quá 20 ký tự.',
             'id_card_number.unique' => 'Số CCCD/CMND này đã tồn tại trong hệ thống.',
 

@@ -40,7 +40,7 @@ class RoomResource extends JsonResource
             'status_label' => $this->status?->label(),
 
             'description' => $this->description,
-            
+
             'amenities' => $this->amenities ?? [],
 
             'created_at' => $this->created_at?->toISOString(),
@@ -67,69 +67,97 @@ class RoomResource extends JsonResource
                 ])->values()
             ),
             // Số lượng người đang ở hiện tại
-            'current_occupants_count' => $this->whenLoaded(
-                'currentResidents',
-                fn() => $this->currentResidents->count()
-            ),
-            // Thông tin người đại diện (nếu có)
-            'representative' => $this->whenLoaded('currentResidents', function () {
-                $resident = $this->currentResidents
-                    ->firstWhere('role', 'representative');
+            'current_occupants_count' => $this->whenLoaded('activeLease', function () {
+                if (!$this->activeLease) return 0;
+                // 1 người đại diện + số người ở ghép
+                $membersCount = $this->activeLease->relationLoaded('members') ? $this->activeLease->members->count() : 0;
+                return 1 + $membersCount;
+            }),
 
-                if (!$resident || !$resident->tenant) {
+            // Thông tin người đại diện (nếu có)
+            'representative' => $this->whenLoaded('activeLease', function () {
+                if (!$this->activeLease || !$this->activeLease->relationLoaded('tenant') || !$this->activeLease->tenant) {
                     return null;
                 }
 
-                return [
-                    'resident_id' => $resident->id,
-                    'role' => $resident->role,
-                    'status' => $resident->status,
-                    'move_in_date' => $resident->move_in_date?->toDateString(),
+                $tenant = $this->activeLease->tenant;
 
+                return [
+                    'resident_id' => 'rep_' . $tenant->id, // ID ảo để FE dùng làm key map
+                    'role' => 'representative',
+                    'status' => 'active',
+                    'move_in_date' => $this->activeLease->start_date?->toDateString(),
                     'tenant' => [
-                        'id' => $resident->tenant->id,
-                        'full_name' => $resident->tenant->full_name,
-                        'name' => $resident->tenant->full_name,
-                        'phone' => $resident->tenant->phone,
-                        'email' => $resident->tenant->email,
-                        'id_card_number' => $resident->tenant->id_card_number,
+                        'id' => $tenant->id,
+                        'full_name' => $tenant->full_name,
+                        'name' => $tenant->full_name,
+                        'phone' => $tenant->phone,
+                        'email' => $tenant->email,
+                        'id_card_number' => $tenant->id_card_number,
                     ],
                 ];
             }),
-            // Danh sách người đang ở hiện tại (nếu có)
-            'current_residents' => $this->whenLoaded(
-                'currentResidents',
-                fn() => $this->currentResidents->map(fn($resident) => [
-                    'resident_id' => $resident->id,
-                    'role' => $resident->role,
-                    'status' => $resident->status,
-                    'move_in_date' => $resident->move_in_date?->toDateString(),
-                    'move_out_date' => $resident->move_out_date?->toDateString(),
-                    'note' => $resident->note,
 
-                    'tenant' => $resident->tenant ? [
-                        'id' => $resident->tenant->id,
-                        'full_name' => $resident->tenant->full_name,
-                        'name' => $resident->tenant->full_name,
-                        'phone' => $resident->tenant->phone,
-                        'email' => $resident->tenant->email,
-                        'id_card_number' => $resident->tenant->id_card_number,
-                    ] : null,
-                ])->values()
-            ),
+            // Danh sách toàn bộ người đang ở (Bao gồm Đại diện + Ở ghép)
+            'current_residents' => $this->whenLoaded('activeLease', function () {
+                if (!$this->activeLease) {
+                    return [];
+                }
 
-            'tenant_name' => $this->whenLoaded('currentResidents', function () {
-                $representative = $this->currentResidents
-                    ->firstWhere('role', 'representative');
+                $residents = collect();
 
-                return $representative?->tenant?->full_name;
+                // 1. Thêm người đại diện vào đầu danh sách
+                if ($this->activeLease->relationLoaded('tenant') && $this->activeLease->tenant) {
+                    $tenant = $this->activeLease->tenant;
+                    $residents->push([
+                        'resident_id' => 'rep_' . $tenant->id,
+                        'role' => 'representative',
+                        'status' => 'active',
+                        'move_in_date' => $this->activeLease->start_date?->toDateString(),
+                        'move_out_date' => null,
+                        'note' => null,
+                        'tenant' => [
+                            'id' => $tenant->id,
+                            'full_name' => $tenant->full_name,
+                            'name' => $tenant->full_name,
+                            'phone' => $tenant->phone,
+                            'email' => $tenant->email,
+                            'id_card_number' => $tenant->id_card_number,
+                        ],
+                    ]);
+                }
+
+                // 2. Thêm người ở ghép vào tiếp theo
+                if ($this->activeLease->relationLoaded('members')) {
+                    $members = $this->activeLease->members->map(fn($member) => [
+                        'resident_id' => $member->id,
+                        'role' => 'member',
+                        'status' => 'active',
+                        'move_in_date' => $member->move_in_date?->toDateString(),
+                        'move_out_date' => $member->move_out_date?->toDateString(),
+                        'note' => $member->note,
+                        'tenant' => $member->tenant ? [
+                            'id' => $member->tenant->id,
+                            'full_name' => $member->tenant->full_name,
+                            'name' => $member->tenant->full_name,
+                            'phone' => $member->tenant->phone,
+                            'email' => $member->tenant->email,
+                            'id_card_number' => $member->tenant->id_card_number,
+                        ] : null,
+                    ]);
+
+                    $residents = $residents->concat($members);
+                }
+
+                return $residents->values();
             }),
 
-            'tenant_phone' => $this->whenLoaded('currentResidents', function () {
-                $representative = $this->currentResidents
-                    ->firstWhere('role', 'representative');
+            'tenant_name' => $this->whenLoaded('activeLease', function () {
+                return $this->activeLease?->tenant?->full_name;
+            }),
 
-                return $representative?->tenant?->phone;
+            'tenant_phone' => $this->whenLoaded('activeLease', function () {
+                return $this->activeLease?->tenant?->phone;
             }),
 
             'pending_reservation' => $this->whenLoaded('reservations', function () {

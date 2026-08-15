@@ -17,6 +17,8 @@ return new class extends Migration
     {
         Schema::create('tenants', function (Blueprint $table) {
             $table->id()->comment('ID khách thuê');
+            $table->unsignedBigInteger('owner_id')
+                ->comment('FK users - Chủ trọ sở hữu hồ sơ này');
             $table->unsignedBigInteger('user_id')->nullable()
                 ->comment('FK users - liên kết tài khoản đăng nhập (nếu có)');
             $table->string('full_name', 100)->comment('Họ và tên khách thuê');
@@ -26,19 +28,20 @@ return new class extends Migration
             $table->string('phone', 15)
                 ->index()
                 ->comment('Số điện thoại');
-            $table->string('id_card_number', 20)->unique()
-                ->comment('Số CCCD/CMND - không được trùng');
+            $table->string('id_card_number', 20)->nullable()->unique()
+                ->comment('Số CCCD/CMND - không được trùng (có thể để trống)');
             $table->string('id_card_front_image', 500)->nullable()
                 ->comment('URL ảnh mặt trước CCCD');
             $table->string('id_card_back_image', 500)->nullable()
                 ->comment('URL ảnh mặt sau CCCD');
             $table->timestamps();
 
-            $table->foreign('user_id')
-                ->references('id')
-                ->on('users')
-                ->onDelete('set null');
+            // Unique kép: Trong 1 chủ trọ thì SĐT và CCCD không được trùng
+            $table->unique(['owner_id', 'phone'], 'uq_owner_phone');
+            $table->unique(['owner_id', 'id_card_number'], 'uq_owner_id_card');
 
+            $table->foreign('owner_id')->references('id')->on('users')->cascadeOnDelete();
+            $table->foreign('user_id')->references('id')->on('users')->nullOnDelete();
             $table->index('user_id');
         });
     }

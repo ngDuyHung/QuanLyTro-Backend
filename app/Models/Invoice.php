@@ -49,6 +49,10 @@ class Invoice extends Model
 
         'note',
         'created_by',
+
+        'tenant_name_snapshot',
+        'tenant_phone_snapshot',
+        'room_name_snapshot',
     ];
 
     protected $casts = [

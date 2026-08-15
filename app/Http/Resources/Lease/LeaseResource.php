@@ -11,6 +11,11 @@ class LeaseResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        // Tìm hóa đơn mới nhất (không bị hủy) trực tiếp từ relation đã được load
+        $latestInvoice = $this->relationLoaded('invoices')
+            ? $this->invoices->where('status', '!=', 'cancelled')->sortByDesc('period_to')->first()
+            : null;
+
         return [
             'id'                   => $this->id,
             'room_id'              => $this->room_id,
@@ -102,34 +107,8 @@ class LeaseResource extends JsonResource
                 ])->values(); // Reset lại key của array
             }),
 
-            'unpaid_amount' => $this->whenLoaded('invoices', function () {
-                return $this->invoices->sum('remaining_amount');
-            }, 0),
-
-            'payment_status' => $this->whenLoaded('invoices', function () {
-                if ($this->status !== 'active' && $this->status?->value !== 'active') {
-                    return null;
-                }
-
-                $unpaidAmount = $this->invoices->sum('remaining_amount');
-                if ($unpaidAmount > 0) {
-                    return 'debt'; // Trạng thái: Đang nợ
-                }
-
-                $currentMonth = now()->format('Y-m');
-                // Tìm hóa đơn mới nhất
-                $latest = $this->invoices->sortByDesc('id')->first();
-
-                if (
-                    !$latest ||
-                    !$latest->period_from ||
-                    \Carbon\Carbon::parse($latest->period_from)->format('Y-m') < $currentMonth
-                ) {
-                    return 'unbilled'; // Trạng thái: Chưa lập hóa đơn tháng này
-                }
-
-                return 'paid'; // Trạng thái: Đã thu đủ
-            }),
+            'payment_status' => $latestInvoice ? $latestInvoice->status : 'unbilled',
+            'unpaid_amount'  => $latestInvoice ? (int) $latestInvoice->remaining_amount : 0,
         ];
     }
 }

@@ -37,6 +37,11 @@ class Sheet4LeaseTenantImport implements ToCollection
 
             if (empty($rowData[0]) || empty($rowData[1]) || empty($rowData[3])) continue;
 
+            // DÒNG NÀY VÀO ĐÂY ĐỂ FIX SĐT MẤT SỐ 0 TỪ EXCEL:
+            if (!empty($rowData[4]) && !str_starts_with((string)$rowData[4], '0')) {
+                $rowData[4] = '0' . (string)$rowData[4];
+            }
+
             $validator = Validator::make(
                 $rowData,
                 [
@@ -95,7 +100,7 @@ class Sheet4LeaseTenantImport implements ToCollection
                             'tenant_email'          => $rowData[6],
                             'lease_start_date'      => \Carbon\Carbon::parse($rowData[7])->format('Y-m-d'),
                         ];
-                        $this->leaseService->addRoommateFromImport($roomId, $leaseId, $mappedRoommateData);
+                        $this->leaseService->addRoommateFromImport($roomId, $leaseId, $mappedRoommateData, $this->userId);
 
                         // Kịch bản: Đại diện
                     } else {
@@ -116,8 +121,8 @@ class Sheet4LeaseTenantImport implements ToCollection
                             'lease_water_reading'       => $rowData[13],
                         ];
 
-                        $lease = $this->leaseService->createFromImport($room->id, $mappedLeaseData);
-                        $room->update(['status' => 'occupied']);
+                        $lease = $this->leaseService->createFromImport($room->id, $mappedLeaseData,$this->userId);
+                       
 
                         $this->roomLeaseCache[$roomCacheKey] = ['room_id' => $room->id, 'lease_id' => $lease->id];
                     }

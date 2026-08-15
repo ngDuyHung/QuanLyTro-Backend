@@ -29,6 +29,10 @@ class InvoiceResource extends JsonResource
             'status' => $this->status,
             'status_label' => $this->statusLabel((string) $this->status),
 
+            'tenant_name_snapshot' => $this->tenant_name_snapshot,
+            'tenant_phone_snapshot' => $this->tenant_phone_snapshot,
+            'room_name_snapshot' => $this->room_name_snapshot,
+
             /*
              |--------------------------------------------------------------------------
              | Liên kết chính
@@ -182,8 +186,8 @@ class InvoiceResource extends JsonResource
                             'amount' => (int) $allocation->financialTransaction->amount,
                             'method' => $allocation->financialTransaction->method,
                             'proof_image' => $allocation->financialTransaction->proof_image
-                            ? asset('storage/' . ltrim($allocation->financialTransaction->proof_image, '/'))
-                            : null,
+                                ? asset('storage/' . ltrim($allocation->financialTransaction->proof_image, '/'))
+                                : null,
                             'status' => $allocation->financialTransaction->status,
                             'transaction_date' => $allocation->financialTransaction->transaction_date?->toDateTimeString(),
                         ]

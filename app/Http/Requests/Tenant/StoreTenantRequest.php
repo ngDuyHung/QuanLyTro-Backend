@@ -16,6 +16,16 @@ class StoreTenantRequest extends FormRequest
 
     public function rules(): array
     {
+
+        // TÌM XEM SĐT ĐÃ CÓ CHƯA
+        $tenantData = $this->input('tenant', []);
+        $phone = isset($tenantData['phone']) ? preg_replace('/\D/', '', (string) $tenantData['phone']) : null;
+        $existingTenant = $phone
+            ? \App\Models\Tenant::where('phone', $phone)
+            ->where('owner_id', $this->user()->id) // THÊM ĐIỀU KIỆN NÀY
+            ->first()
+            : null;
+        $tenantId = $existingTenant ? $existingTenant->id : null;
         return [
             // Phòng bắt buộc khi thêm khách từ danh mục khách thuê
             'room_id' => ['required', 'integer', 'exists:rooms,id'],
@@ -23,8 +33,18 @@ class StoreTenantRequest extends FormRequest
             // Thông tin khách thuê
             'full_name' => ['required', 'string', 'max:100'],
             'email' => ['nullable', 'email', 'max:255'],
-            'phone' => ['required', 'string', 'regex:/^[0-9]{9,15}$/'],
-            'id_card_number' => ['required', 'string', 'max:20'],
+            'phone' => [
+                'required',
+                'string',
+                'regex:/^[0-9]{9,15}$/',
+                \Illuminate\Validation\Rule::unique('tenants', 'phone')->where('owner_id', $this->user()->id)->ignore($tenantId)
+            ],
+            'id_card_number' => [
+                'nullable',
+                'string',
+                'max:20',
+                \Illuminate\Validation\Rule::unique('tenants', 'id_card_number')->where('owner_id', $this->user()->id)->ignore($tenantId)
+            ],
             'id_card_front_image' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'id_card_back_image' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
 
@@ -49,11 +69,9 @@ class StoreTenantRequest extends FormRequest
 
             'email.email' => 'Email không hợp lệ.',
             'email.unique' => 'Email này đã được sử dụng.',
-            'phone.unique' => 'Số điện thoại này đã được sử dụng.',
             'phone.required' => 'Số điện thoại không được để trống.',
             'phone.regex' => 'Số điện thoại không hợp lệ (9–15 chữ số).',
-
-            'id_card_number.required' => 'Số CCCD/CMND không được để trống.',
+            'phone.unique' => 'Số điện thoại này đã được khách thuê khác sử dụng trong hệ thống.',
             'id_card_number.max' => 'Số CCCD/CMND không được vượt quá 20 ký tự.',
             'id_card_number.unique' => 'Số CCCD/CMND này đã tồn tại trong hệ thống.',
 

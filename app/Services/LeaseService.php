@@ -69,8 +69,7 @@ class LeaseService
                     'is_active' => true,
                 ]);
 
-                $tenant = $this->tenantService->createProfile(array_merge($data['tenant'], ['user_id' => $accountTenat->id]));
-
+                $tenant = $this->tenantService->createProfile(array_merge($data['tenant'], ['user_id' => $accountTenat->id]), $userId);
 
 
                 $createdTenantId = $tenant->id;
@@ -92,12 +91,6 @@ class LeaseService
                     $reservation->update(['lease_id' => $lease->id]);
                 }
 
-                $this->tenantService->createRepresentativeResidence(
-                    tenant: $tenant,
-                    lease: $lease,
-                    moveInDate: $data['start_date'],
-                    note: 'Người đứng tên hợp đồng.'
-                );
 
                 $room->update([
                     'status' => RoomStatus::Occupied->value,
@@ -155,8 +148,7 @@ class LeaseService
 
                 return $lease->load([
                     'room.property',
-                    'tenant.currentResidence.room.property',
-                    'tenant.currentResidence.lease',
+                    'tenant',
                     'serviceItems',
                 ]);
             });
@@ -185,13 +177,6 @@ class LeaseService
                 'status' => LeaseStatus::Ended->value,
                 'end_date' => $date,
             ]);
-
-            RoomResident::where('lease_id', $lease->id)
-                ->whereIn('status', ['pending', 'active'])
-                ->update([
-                    'status' => 'left',
-                    'move_out_date' => $date,
-                ]);
 
             LeaseMember::where('lease_id', $lease->id)
                 ->whereNull('move_out_date')
@@ -230,157 +215,118 @@ class LeaseService
     /**
      * Khởi tạo hợp đồng và lưu vết cư dân đại diện ban đầu
      */
-    public function createFromImport(int $roomId, array $data): Lease
+    public function createFromImport(int $roomId, array $data, int $userId): Lease
     {
-        // 1. Tạo tài khoản đăng nhập trước (tương tự createLease)
-        $accountTenant = $this->authService->getOrCreateTenantUser([
-            'name'      => trim((string)$data['tenant_full_name']),
-            'phone'     => preg_replace('/\D/', '', (string)$data['tenant_phone']),
-            'email'     => !empty($data['tenant_email']) ? strtolower(trim((string)$data['tenant_email'])) : null,
-            'password'  => preg_replace('/\D/', '', (string)$data['tenant_phone']), // Mật khẩu mặc định là SĐT
-            'is_active' => true,
-        ]);
+        return DB::transaction(function () use ($roomId, $data, $userId) {
+            $tenantData = [
+                'full_name'      => trim((string)$data['tenant_full_name']),
+                'phone'          => preg_replace('/\D/', '', (string)$data['tenant_phone']),
+                'email'          => !empty($data['tenant_email']) ? strtolower(trim((string)$data['tenant_email'])) : null,
+                'id_card_number' => !empty($data['tenant_id_card_number']) ? trim((string)$data['tenant_id_card_number']) : null,
+            ];
+            $tenant = $this->tenantService->createProfile($tenantData, $userId);
 
-        // 2. Tạo hoặc cập nhật Tenant và gán user_id
-        $tenant = Tenant::updateOrCreate(
-            ['id_card_number' => trim((string)$data['tenant_id_card_number'])],
-            [
-                'full_name' => trim((string)$data['tenant_full_name']),
-                'phone'     => preg_replace('/\D/', '', (string)$data['tenant_phone']),
-                'email'     => !empty($data['tenant_email']) ? strtolower(trim((string)$data['tenant_email'])) : null,
-                'user_id'   => $accountTenant->id, // Bổ sung ID tài khoản vừa tạo
-            ]
-        );
+            $deposit = $data['lease_deposit'] ?? $data['room_current_price'];
 
-        $deposit = $data['lease_deposit'] ?? $data['room_current_price'];
+            $lease = Lease::create([
+                'room_id'     => $roomId,
+                'tenant_id'   => $tenant->id,
+                'start_date'  => $data['lease_start_date'],
+                'billing_day' => $data['lease_billing_day'] ?? 1,
+                'room_price'  => $data['lease_room_price'],
+                'occupants_count' => $data['occupants_count'] ?? 1,
+                'deposit'     => $deposit,
+                'status'      => 'active',
+            ]);
 
-        $lease = Lease::create([
-            'room_id'     => $roomId,
-            'tenant_id'   => $tenant->id,
-            'start_date'  => $data['lease_start_date'],
-            'billing_day' => $data['lease_billing_day'] ?? 1,
-            'room_price'  => $data['lease_room_price'],
-            'occupants_count' => $data['occupants_count'] ?? 1,
-            'deposit'     => $deposit,
-            'status'      => 'active',
-        ]);
+            // Đã sửa lại đúng cấu trúc trường của bảng lease_members trong SQL (dùng relationship thay vì role)
+            $lease->members()->create([
+                'tenant_id'    => $tenant->id,
+                'relationship' => 'other',
+                'move_in_date' => $data['lease_start_date'],
+            ]);
 
-        // Đã sửa lại đúng cấu trúc trường của bảng lease_members trong SQL (dùng relationship thay vì role)
-        $lease->members()->create([
-            'tenant_id'    => $tenant->id,
-            'relationship' => 'other',
-            'move_in_date' => $data['lease_start_date'],
-        ]);
 
-        \App\Models\RoomResident::create([
-            'room_id'      => $roomId,
-            'tenant_id'    => $tenant->id,
-            'lease_id'     => $lease->id,
-            'role'         => 'representative', // Người đại diện đứng tên phòng
-            'status'       => 'active',
-            'move_in_date' => $data['lease_start_date'],
-            'note'         => 'Hồ sơ cư trú đại diện được tạo tự động từ hệ thống Import Excel.',
-        ]);
+            \App\Models\MeterReading::create([
+                'lease_id'         => $lease->id,
+                'type'             => 'electricity',
+                'previous_reading' => (int)$data['lease_electricity_reading'],
+                'current_reading'  => (int)$data['lease_electricity_reading'],
+                'reading_date'     => $data['lease_start_date'],
+                'note'             => 'Chỉ số điện ban đầu (Import)',
+            ]);
 
-        \App\Models\MeterReading::create([
-            'lease_id'         => $lease->id,
-            'type'             => 'electricity',
-            'previous_reading' => (int)$data['lease_electricity_reading'],
-            'current_reading'  => (int)$data['lease_electricity_reading'],
-            'reading_date'     => $data['lease_start_date'],
-            'note'             => 'Chỉ số điện ban đầu (Import)',
-        ]);
+            \App\Models\MeterReading::create([
+                'lease_id'         => $lease->id,
+                'type'             => 'water',
+                'previous_reading' => (int)$data['lease_water_reading'],
+                'current_reading'  => (int)$data['lease_water_reading'],
+                'reading_date'     => $data['lease_start_date'],
+                'note'             => 'Chỉ số nước ban đầu (Import)',
+            ]);
 
-        \App\Models\MeterReading::create([
-            'lease_id'         => $lease->id,
-            'type'             => 'water',
-            'previous_reading' => (int)$data['lease_water_reading'],
-            'current_reading'  => (int)$data['lease_water_reading'],
-            'reading_date'     => $data['lease_start_date'],
-            'note'             => 'Chỉ số nước ban đầu (Import)',
-        ]);
-
-        /* |--------------------------------------------------------------------------
+            /* |--------------------------------------------------------------------------
         | BỔ SUNG: TỰ ĐỘNG GÁN DỊCH VỤ ĐI KÈM CHO HỢP ĐỒNG IMPORT
         | Lấy giá khu nhà (Sheet 2) -> Check ghi đè giá HĐ (Sheet 3)
         |--------------------------------------------------------------------------
         */
-        $room = \App\Models\Room::find($roomId);
+            $room = \App\Models\Room::find($roomId);
 
-        if ($room) {
-            // Lấy toàn bộ cấu hình giá của khu nhà
-            $propertyPrices = \App\Models\ServicePrice::where('property_id', $room->property_id)
-                ->get()
-                ->keyBy(fn($p) => $p->service_type->value ?? $p->service_type);
+            if ($room) {
+                $room->update(['status' => 'occupied']);
+                // Lấy toàn bộ cấu hình giá của khu nhà
+                $propertyPrices = \App\Models\ServicePrice::where('property_id', $room->property_id)
+                    ->get()
+                    ->keyBy(fn($p) => $p->service_type->value ?? $p->service_type);
 
-            $assignedTypes = $propertyPrices->keys()->all();
+                $assignedTypes = $propertyPrices->keys()->all();
 
-            // Lấy thêm giá mặc định hệ thống nếu khu nhà chưa cài đủ 4 loại
-            $globalPrices = \App\Models\ServicePrice::whereNull('property_id')
-                ->when(!empty($assignedTypes), fn($q) => $q->whereNotIn('service_type', $assignedTypes))
-                ->get()
-                ->keyBy(fn($p) => $p->service_type->value ?? $p->service_type);
+                // Lấy thêm giá mặc định hệ thống nếu khu nhà chưa cài đủ 4 loại
+                $globalPrices = \App\Models\ServicePrice::whereNull('property_id')
+                    ->when(!empty($assignedTypes), fn($q) => $q->whereNotIn('service_type', $assignedTypes))
+                    ->get()
+                    ->keyBy(fn($p) => $p->service_type->value ?? $p->service_type);
 
-            $mergedPrices = $propertyPrices->merge($globalPrices)->values();
+                $mergedPrices = $propertyPrices->merge($globalPrices)->values();
 
-            // Mảng giá thỏa thuận riêng truyền từ Sheet3LeaseTenantImport
-            $customServices = $data['custom_services'] ?? [];
+                // Mảng giá thỏa thuận riêng truyền từ Sheet3LeaseTenantImport
+                $customServices = $data['custom_services'] ?? [];
 
-            foreach ($mergedPrices as $service) {
-                $serviceType = $service->service_type->value ?? $service->service_type;
+                foreach ($mergedPrices as $service) {
+                    $serviceType = $service->service_type->value ?? $service->service_type;
 
-                // Nếu Sheet 3 có điền số -> Dùng số đó làm custom_price
-                // Nếu Sheet 3 bỏ trống (null) -> custom_price = null (tức là lấy giá khu nhà/hệ thống)
-                $excelPrice = $customServices[$serviceType] ?? null;
-                $finalCustomPrice = ($excelPrice !== null && $excelPrice !== '') ? (int)$excelPrice : null;
+                    // Nếu Sheet 3 có điền số -> Dùng số đó làm custom_price
+                    // Nếu Sheet 3 bỏ trống (null) -> custom_price = null (tức là lấy giá khu nhà/hệ thống)
+                    $excelPrice = $customServices[$serviceType] ?? null;
+                    $finalCustomPrice = ($excelPrice !== null && $excelPrice !== '') ? (int)$excelPrice : null;
 
-                $lease->serviceItems()->create([
-                    'service_type'   => $serviceType,
-                    'quantity'       => 1, // Khi import, ta mặc định số lượng = 1
-                    'custom_price'   => $finalCustomPrice,
-                    'effective_date' => $data['lease_start_date'],
-                    'expiry_date'    => null,
-                ]);
+                    $lease->serviceItems()->create([
+                        'service_type'   => $serviceType,
+                        'quantity'       => 1, // Khi import, ta mặc định số lượng = 1
+                        'custom_price'   => $finalCustomPrice,
+                        'effective_date' => $data['lease_start_date'],
+                        'expiry_date'    => null,
+                    ]);
+                }
             }
-        }
 
-        return $lease;
+            return $lease;
+        });
     }
 
     /**
      *  HÀM Xử lý thêm Khách Ở Ghép vào Hợp đồng và Phòng đang vận hành
      */
-    public function addRoommateFromImport(int $roomId, int $leaseId, array $data): void
+    public function addRoommateFromImport(int $roomId, int $leaseId, array $data, int $userId): void
     {
-        // 1. TẠO TÀI KHOẢN HỆ THỐNG TRƯỚC
-        $accountTenant = $this->authService->getOrCreateTenantUser([
-            'name'      => trim((string)$data['tenant_full_name']),
-            'phone'     => preg_replace('/\D/', '', (string)$data['tenant_phone']),
-            'email'     => !empty($data['tenant_email']) ? strtolower(trim((string)$data['tenant_email'])) : null,
-            'password'  => preg_replace('/\D/', '', (string)$data['tenant_phone']),
-            'is_active' => true,
-        ]);
 
-        // 2. CẬP NHẬT HOẶC TẠO HỒ SƠ KHÁCH THUÊ 
-        $tenant = Tenant::updateOrCreate(
-            ['id_card_number' => trim((string)$data['tenant_id_card_number'])],
-            [
-                'full_name' => trim((string)$data['tenant_full_name']),
-                'phone'     => preg_replace('/\D/', '', (string)$data['tenant_phone']),
-                'email'     => !empty($data['tenant_email']) ? strtolower(trim((string)$data['tenant_email'])) : null,
-                'user_id'   => $accountTenant->id, // Bổ sung dòng này
-            ]
-        );
-
-        // Chặn trùng lặp: Kiểm tra xem người này đã được add vào trạng thái active trong phòng này chưa
-        $residentExists = \App\Models\RoomResident::where('room_id', $roomId)
-            ->where('tenant_id', $tenant->id)
-            ->where('status', 'active')
-            ->exists();
-
-        if ($residentExists) {
-            throw new \Exception("Khách ở ghép '{$tenant->full_name}' bị trùng lặp thông tin dữ liệu trong cùng một phòng.");
-        }
+        $tenantData = [
+            'full_name'      => trim((string)$data['tenant_full_name']),
+            'phone'          => preg_replace('/\D/', '', (string)$data['tenant_phone']),
+            'email'          => !empty($data['tenant_email']) ? strtolower(trim((string)$data['tenant_email'])) : null,
+            'id_card_number' => !empty($data['tenant_id_card_number']) ? trim((string)$data['tenant_id_card_number']) : null,
+        ];
+        $tenant = $this->tenantService->createProfile($tenantData, $userId);
 
         $lease = Lease::findOrFail($leaseId);
 
@@ -389,17 +335,6 @@ class LeaseService
             'tenant_id'    => $tenant->id,
             'relationship' => 'friend',
             'move_in_date' => $data['lease_start_date'],
-        ]);
-
-        // 3. Thiết lập mối quan hệ cư trú thực tế trong bảng room_residents với vai trò 'member'
-        \App\Models\RoomResident::create([
-            'room_id'      => $roomId,
-            'tenant_id'    => $tenant->id,
-            'lease_id'     => $leaseId,
-            'role'         => 'member', // Phân luồng chính xác: Là thành viên ở ghép (member) chứ không phải đại diện
-            'status'       => 'active', // Trạng thái hoạt động trực tiếp trong phòng
-            'move_in_date' => $data['lease_start_date'],
-            'note'         => 'Thành viên ở ghép được đồng bộ tự động từ hệ thống Import Excel.',
         ]);
     }
 }

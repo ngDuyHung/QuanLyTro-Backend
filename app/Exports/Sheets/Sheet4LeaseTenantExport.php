@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Exports\Sheets;
 
 use App\Models\Lease;
-use App\Models\RoomResident;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -75,8 +74,20 @@ class Sheet4LeaseTenantExport implements FromCollection, WithStyles, ShouldAutoS
         // 3. Cơ chế Fallback nếu trống trải dữ liệu
         if ($leases->isEmpty()) {
             $data->push([
-                'KH-01', 'P.101', 'Đại diện', 'Dương Thị Yến Linh', '0987667898',
-                '082306003801', '', '2026-07-04', 12, 2, 3500000, 1000000, 140, 250
+                'KH-01',
+                'P.101',
+                'Đại diện',
+                'Dương Thị Yến Linh',
+                '0987667898',
+                '082306003801',
+                '',
+                '2026-07-04',
+                12,
+                2,
+                3500000,
+                1000000,
+                140,
+                250
             ]);
         } else {
             // 4. Duyệt vòng lặp bóc tách xuất dữ liệu thật
@@ -107,10 +118,9 @@ class Sheet4LeaseTenantExport implements FromCollection, WithStyles, ShouldAutoS
                 ]);
 
                 // B. Tìm kiếm và nạp các thành viên Ở Ghép (members) đang hoạt động cùng phòng này
-                $roommates = RoomResident::with('tenant')
+                $roommates = \App\Models\LeaseMember::with('tenant')
                     ->where('lease_id', $lease->id)
-                    ->where('role', 'member')
-                    ->where('status', 'active')
+                    ->whereNull('move_out_date') // Những người chưa rời đi
                     ->get();
 
                 foreach ($roommates as $roommate) {
@@ -151,14 +161,14 @@ class Sheet4LeaseTenantExport implements FromCollection, WithStyles, ShouldAutoS
         $sheet->getRowDimension(2)->setRowHeight(25);
         $sheet->getStyle('A2:N2')->getFont()->setBold(true);
         $sheet->getStyle('A2:N2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FCE4D6');
-        
+
         $highestRow = $sheet->getHighestRow();
         $sheet->getStyle("A1:N{$highestRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('BFBFBF');
 
         // Định dạng text cho SĐT và CCCD để tránh bị Excel rụng mất số 0 ở đầu dòng
         $sheet->getStyle("E3:E{$highestRow}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
         $sheet->getStyle("F3:F{$highestRow}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
-        
+
         // Định dạng phân tách hàng nghìn cho tiền tệ
         $sheet->getStyle("K3:L{$highestRow}")->getNumberFormat()->setFormatCode('#,##0');
 

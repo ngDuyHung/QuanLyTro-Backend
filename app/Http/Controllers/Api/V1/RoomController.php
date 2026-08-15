@@ -41,10 +41,9 @@ class RoomController extends Controller
             'property',
             'images' => fn($query) => $query->orderBy('sort_order'),
 
-            'currentResidents' => fn($query) => $query
-                ->with('tenant:id,full_name,phone,email,id_card_number')
-                ->orderByRaw("role = 'representative' desc")
-                ->orderBy('id'),
+            'activeLease.tenant:id,full_name,phone,email,id_card_number',
+            'activeLease.members' => fn($q) => $q->whereNull('move_out_date')->with('tenant:id,full_name,phone,email,id_card_number'),
+
             'reservations' => fn($query) => $query
                 ->where('status', 'pending'),
             // Lấy các hóa đơn đang nợ CỦA HỢP ĐỒNG HIỆN TẠI
@@ -75,11 +74,8 @@ class RoomController extends Controller
             'property',
             'images' => fn($query) => $query->orderBy('sort_order'),
 
-            // BỔ SUNG ĐOẠN NÀY ĐỂ EAGER LOAD NGƯỜI THUÊ (Fix lỗi N+1 và rỗng data)
-            'currentResidents' => fn($query) => $query
-                ->with('tenant:id,full_name,phone,email,id_card_number')
-                ->orderByRaw("role = 'representative' desc")
-                ->orderBy('id'),
+            'activeLease.tenant:id,full_name,phone,email,id_card_number',
+            'activeLease.members' => fn($q) => $q->whereNull('move_out_date')->with('tenant:id,full_name,phone,email,id_card_number'),
             'reservations' => fn($query) => $query->where('status', 'pending'),
             // Lấy các hóa đơn đang nợ CỦA HỢP ĐỒNG HIỆN TẠI
             'invoices' => fn($query) => $query->whereIn('status', ['draft', 'issued', 'partially_paid', 'overdue'])
@@ -145,10 +141,8 @@ class RoomController extends Controller
             'property',
             'images' => fn($query) => $query->orderBy('sort_order'),
 
-            'currentResidents' => fn($query) => $query
-                ->with('tenant:id,full_name,phone,email,id_card_number')
-                ->orderByRaw("role = 'representative' desc")
-                ->orderBy('id'),
+            'activeLease.tenant:id,full_name,phone,email,id_card_number',
+            'activeLease.members' => fn($q) => $q->whereNull('move_out_date')->with('tenant:id,full_name,phone,email,id_card_number'),
             'reservations' => fn($query) => $query->where('status', 'pending'),
             'invoices' => fn($query) => $query->whereIn('status', ['draft', 'issued', 'partially_paid', 'overdue'])
                 ->whereHas('lease', fn($q) => $q->where('status', 'active')),
@@ -473,8 +467,8 @@ class RoomController extends Controller
 
         $rooms = Room::with([
             'property:id,name',
-            'currentResidents' => fn($query) => $query->where('role', 'representative')->with('tenant:id,full_name,phone'),
-            'leases' => fn($query) => $query->where('status', 'active')->with(['invoices.allocations']),
+            // SỬA LẠI DÒNG LEASES ĐỂ EAGER LOAD THÊM TENANT:
+            'leases' => fn($query) => $query->where('status', 'active')->with(['tenant:id,full_name,phone', 'invoices.allocations']),
         ])
             ->whereHas('property', fn($query) => $query->where('user_id', $request->user()->id))
             ->when($request->filled('property_id'), fn($query) => $query->where('property_id', $request->integer('property_id')))
@@ -487,8 +481,7 @@ class RoomController extends Controller
             $lease = $room->leases->first();
             if (!$lease) continue;
 
-            $representative = $room->currentResidents->first();
-            $tenant = $representative ? $representative->tenant : null;
+            $tenant = $lease->tenant;
 
             $invoices = $lease->invoices;
             $totalInvoices = $invoices->count();

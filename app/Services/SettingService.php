@@ -247,7 +247,7 @@ class SettingService
             if (in_array($item->charge_type, ['electricity', 'water'])) {
                 $meter = $invoice->meterReadings->where('type', $item->charge_type)->first();
                 if ($meter) {
-                    $detailText = "<br><span style='font-size: 11px; color: #64748b; font-weight: normal;'>(Số cũ: {$meter->previous_reading} - Số mới: {$meter->current_reading}";
+                    $detailText = "<br><span style='font-size: 11px; color: #64748b; font-weight: normal;'>( Mới: {$meter->current_reading} - Cũ: {$meter->previous_reading}";
                     if ($free > 0) $detailText .= " - Miễn phí: {$free}";
                     $detailText .= ")</span>";
                 } elseif ($free > 0) {
@@ -297,10 +297,10 @@ class SettingService
             '{{LANDLORD_NAME}}' => $invoice->room->property->user->name ?? '',
             '{{LANDLORD_PHONE}}' => $invoice->room->property->user->phone ?? '',
 
-            '{{TENANT_NAME}}' => $invoice->lease->tenant->full_name ?? '',
-            '{{TENANT_PHONE}}' => $invoice->lease->tenant->phone ?? '',
+            '{{TENANT_NAME}}' => $invoice->tenant_name_snapshot ?? '',
+            '{{TENANT_PHONE}}' => $invoice->tenant_phone_snapshot ?? '',
 
-            '{{ROOM_NAME}}' => $invoice->room->name ?? '',
+            '{{ROOM_NAME}}' => $invoice->room_name_snapshot ?? '',
             '{{PROPERTY_NAME}}' => $invoice->room->property->name ?? '',
             '{{PROPERTY_ADDRESS}}' => $invoice->room->property->address ?? '',
 

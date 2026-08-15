@@ -9,6 +9,7 @@ use App\Models\FinancialTransaction;
 use App\Models\FinancialTransactionAllocation;
 use App\Models\Invoice;
 use App\Models\SePayTransaction;
+use App\Models\Tenant;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -57,6 +58,7 @@ class FinancialTransactionService
                 'room_id' => $invoice->room_id,
                 'lease_id' => $invoice->lease_id,
                 'tenant_id' => $invoice->lease->tenant_id ?? null,
+                'tenant_name_snapshot' => $invoice->lease->tenant->full_name ?? null,
                 'bank_account_id' => $data['bank_account_id'] ?? null,
                 'sepay_transaction_id' => null,
                 'method' => $data['method'] ?? 'cash',
@@ -177,6 +179,7 @@ class FinancialTransactionService
                 'room_id' => $invoice->room_id,
                 'lease_id' => $invoice->lease_id,
                 'tenant_id' => $invoice->lease->tenant_id ?? null,
+                'tenant_name_snapshot' => $invoice->lease->tenant->full_name ?? null,
                 'bank_account_id' => $sePayTransaction->bank_account_id,
                 'sepay_transaction_id' => $sePayTransaction->id,
                 'method' => 'sepay',
@@ -320,6 +323,9 @@ class FinancialTransactionService
                 'room_id' => $data['room_id'] ?? null,
                 'lease_id' => $data['lease_id'] ?? null,
                 'tenant_id' => $data['tenant_id'] ?? null,
+                'tenant_name_snapshot' => $data['tenant_id']
+                    ? Tenant::find($data['tenant_id'])?->full_name
+                    : null,
                 'bank_account_id' => $data['bank_account_id'] ?? null,
                 'sepay_transaction_id' => $data['sepay_transaction_id'] ?? null,
 

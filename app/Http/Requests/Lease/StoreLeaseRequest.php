@@ -17,6 +17,17 @@ class StoreLeaseRequest extends FormRequest
 
     public function rules(): array
     {
+
+        // TÌM XEM SĐT ĐÃ CÓ TRÊN HỆ THỐNG CHƯA ĐỂ BỎ QUA CHECK UNIQUE CCCD
+        $tenantData = $this->input('tenant', []);
+        $phone = isset($tenantData['phone']) ? preg_replace('/\D/', '', (string) $tenantData['phone']) : null;
+        $existingTenant = $phone
+            ? \App\Models\Tenant::where('phone', $phone)
+            ->where('owner_id', $this->user()->id) // THÊM ĐIỀU KIỆN NÀY
+            ->first()
+            : null;
+        $tenantId = $existingTenant ? $existingTenant->id : null;
+
         return [
             // ── Thông tin hợp đồng ──────────────────────────────────────
             'room_id'             => ['required', 'integer', 'exists:rooms,id'],
@@ -35,8 +46,18 @@ class StoreLeaseRequest extends FormRequest
             'tenant'                       => ['required', 'array'],
             'tenant.full_name'             => ['required', 'string', 'max:100'],
             'tenant.email'                 => ['nullable', 'email', 'max:255', 'unique:tenants,email', 'unique:users,email'],
-            'tenant.phone'                 => ['required', 'string', 'regex:/^[0-9]{9,15}$/', 'unique:tenants,phone', 'unique:users,phone'],
-            'tenant.id_card_number'        => ['required', 'string', 'max:20', 'unique:tenants,id_card_number'],
+            'tenant.phone' => [
+                'required',
+                'string',
+                'regex:/^[0-9]{9,15}$/',
+                \Illuminate\Validation\Rule::unique('tenants', 'phone')->where('owner_id', $this->user()->id)->ignore($tenantId)
+            ],
+            'tenant.id_card_number' => [
+                'nullable',
+                'string',
+                'max:20',
+                \Illuminate\Validation\Rule::unique('tenants', 'id_card_number')->where('owner_id', $this->user()->id)->ignore($tenantId)
+            ],
             'tenant.id_card_front_image'   => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'tenant.id_card_back_image'    => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
 
@@ -111,7 +132,6 @@ class StoreLeaseRequest extends FormRequest
             'tenant.phone.required'                => 'Số điện thoại khách thuê không được để trống.',
             'tenant.phone.regex'                   => 'Số điện thoại không hợp lệ (9–15 chữ số).',
             'tenant.phone.unique'                  => 'Số điện thoại này đã được sử dụng.',
-            'tenant.id_card_number.required'       => 'Số CCCD/CMND không được để trống.',
             'tenant.id_card_number.unique'         => 'Số CCCD/CMND này đã tồn tại trong hệ thống.',
             'tenant.id_card_front_image.image'     => 'Ảnh mặt trước CCCD phải là file hình ảnh.',
             'tenant.id_card_front_image.mimes'     => 'Ảnh mặt trước CCCD chỉ chấp nhận: jpg, jpeg, png, webp.',

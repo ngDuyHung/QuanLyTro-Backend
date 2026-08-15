@@ -8,7 +8,6 @@ use App\Enums\LeaseStatus;
 use App\Exceptions\Domain\BusinessException;
 use App\Models\Lease;
 use App\Models\LeaseMember;
-use App\Models\RoomResident;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -19,56 +18,66 @@ use Throwable;
 
 class TenantService
 {
+    // TIÊM AUTH SERVICE VÀO ĐÂY ĐỂ DÙNG TRONG HÀM CREATE PROFILE
+    public function __construct(
+        private readonly AuthService $authService
+    ) {}
+
     /**
-     * Tạo hồ sơ khách thuê và lưu ảnh CCCD.
+     * Tạo hồ sơ khách thuê, lưu ảnh CCCD và TỰ ĐỘNG cấp tài khoản User
      */
-    public function createProfile(array $data): Tenant
+    public function createProfile(array $data, int $ownerId): Tenant
     {
         $storedPaths = [];
 
         try {
-            return DB::transaction(function () use ($data, &$storedPaths): Tenant {
+            return DB::transaction(function () use ($data, $ownerId, &$storedPaths): Tenant {
+
+                // BƯỚC 1: XỬ LÝ TÀI KHOẢN APP (USER) TRƯỚC
+                $userId = $data['user_id'] ?? null;
+
+                if (empty($userId) && !empty($data['phone'])) {
+                    // Nếu truyền lên SĐT mà chưa có ID, tự động gọi AuthService để tạo/lấy tài khoản
+                    $accountUser = $this->authService->getOrCreateTenantUser([
+                        'name'      => $data['full_name'],
+                        'phone'     => $data['phone'],
+                        'email'     => $data['email'] ?? null,
+                        'password'  => $data['phone'], // Pass mặc định là SĐT nếu tạo mới
+                    ]);
+                    $userId = $accountUser->id;
+                }
+
+                // BƯỚC 2: TẠO HOẶC CẬP NHẬT HỒ SƠ CRM (TENANT)
+                $attributes = [
+                    'full_name' => $data['full_name'],
+                    'user_id'   => $userId, // Gắn ID tài khoản vừa lấy được vào đây luôn
+                ];
+                if (array_key_exists('email', $data)) $attributes['email'] = $data['email'];
+                if (array_key_exists('id_card_number', $data) && $data['id_card_number'] !== null) {
+                    $attributes['id_card_number'] = $data['id_card_number'];
+                }
+
                 $tenant = Tenant::updateOrCreate(
-                    // Điều kiện tìm kiếm (Ưu tiên CCCD, nếu nhập tay không có thì dùng SĐT)
-                    ['id_card_number' => $data['id_card_number']],
-                    // Dữ liệu sẽ update hoặc create
                     [
-                        'full_name' => $data['full_name'],
-                        'email' => $data['email'] ?? null,
-                        'phone' => $data['phone'],
-                        'user_id' => $data['user_id'] ?? null,
-                    ]
+                        'owner_id' => $ownerId,
+                        'phone'    => $data['phone']
+                    ],
+                    $attributes
                 );
+
+                // BƯỚC 3: XỬ LÝ HÌNH ẢNH
                 $imageUpdates = [];
 
-                if (
-                    isset($data['id_card_front_image']) &&
-                    $data['id_card_front_image'] instanceof UploadedFile
-                ) {
+                if (isset($data['id_card_front_image']) && $data['id_card_front_image'] instanceof UploadedFile) {
                     $extension = strtolower($data['id_card_front_image']->extension());
-
-                    $frontPath = $data['id_card_front_image']->storeAs(
-                        "tenants/{$tenant->id}",
-                        "id_card_front.{$extension}",
-                        'public'
-                    );
-
+                    $frontPath = $data['id_card_front_image']->storeAs("tenants/{$tenant->id}", "id_card_front.{$extension}", 'public');
                     $storedPaths[] = $frontPath;
                     $imageUpdates['id_card_front_image'] = $frontPath;
                 }
 
-                if (
-                    isset($data['id_card_back_image']) &&
-                    $data['id_card_back_image'] instanceof UploadedFile
-                ) {
+                if (isset($data['id_card_back_image']) && $data['id_card_back_image'] instanceof UploadedFile) {
                     $extension = strtolower($data['id_card_back_image']->extension());
-
-                    $backPath = $data['id_card_back_image']->storeAs(
-                        "tenants/{$tenant->id}",
-                        "id_card_back.{$extension}",
-                        'public'
-                    );
-
+                    $backPath = $data['id_card_back_image']->storeAs("tenants/{$tenant->id}", "id_card_back.{$extension}", 'public');
                     $storedPaths[] = $backPath;
                     $imageUpdates['id_card_back_image'] = $backPath;
                 }
@@ -83,132 +92,72 @@ class TenantService
             foreach ($storedPaths as $path) {
                 Storage::disk('public')->delete($path);
             }
-
             throw $exception;
         }
     }
 
     /**
-     * Tạo cư trú cho khách đại diện sau khi hợp đồng đã được tạo.
-     */
-    public function createRepresentativeResidence(
-        Tenant $tenant,
-        Lease $lease,
-        ?string $moveInDate = null,
-        ?string $note = null
-    ): RoomResident {
-        $this->ensureTenantHasNoActiveResidence($tenant);
-
-        return RoomResident::create([
-            'room_id' => $lease->room_id,
-            'tenant_id' => $tenant->id,
-            'lease_id' => $lease->id,
-            'role' => 'representative',
-            'status' => 'active',
-            'move_in_date' => $moveInDate ?? $lease->start_date ?? now()->toDateString(),
-            'move_out_date' => null,
-            'note' => $note,
-        ]);
-    }
-
-    /**
      * Tạo cư trú và lease_members cho người ở ghép.
      */
-    public function createMemberResidence(
-        Tenant $tenant,
-        Lease $lease,
-        array $data = []
-    ): RoomResident {
-        $this->ensureTenantHasNoActiveResidence($tenant);
-
+    public function createMemberResidence(Tenant $tenant, Lease $lease, array $data = []): LeaseMember
+    {
         $leaseStatus = $lease->status?->value ?? $lease->status;
 
         if ($leaseStatus !== LeaseStatus::Active->value) {
             throw new BusinessException('Chỉ có thể thêm khách thuê vào phòng đang có hợp đồng hiệu lực.');
         }
 
+        if ((int)$tenant->id === (int)$lease->tenant_id) {
+            throw new BusinessException('Khách thuê này đang là người đứng tên đại diện của phòng này, không thể thêm làm người ở ghép.');
+        }
+
+        $activeRoommate = LeaseMember::where('tenant_id', $tenant->id)
+            ->whereNull('move_out_date')
+            ->whereHas('lease.room.property', fn($query) => $query->where('user_id', $tenant->owner_id))
+            ->with('lease.room')
+            ->first();
+
+        if ($activeRoommate) {
+            $roomName = $activeRoommate->lease?->room?->name ?? 'một phòng khác';
+            throw new BusinessException("Khách thuê này hiện đang là người ở ghép tại {$roomName}. Một người chỉ được ở ghép 1 phòng tại 1 thời điểm. Vui lòng thao tác 'Rời phòng' cũ trước khi thêm vào phòng mới.");
+        }
+
         $moveInDate = $data['move_in_date'] ?? now()->toDateString();
 
-        $residence = RoomResident::create([
-            'room_id' => $lease->room_id,
-            'tenant_id' => $tenant->id,
+        return LeaseMember::create([
             'lease_id' => $lease->id,
-            'role' => 'member',
-            'status' => 'active',
+            'tenant_id' => $tenant->id,
+            'relationship' => $data['relationship'] ?? 'other',
+            'note' => $data['note'] ?? null,
             'move_in_date' => $moveInDate,
             'move_out_date' => null,
-            'note' => $data['note'] ?? null,
         ]);
-
-        LeaseMember::firstOrCreate(
-            [
-                'lease_id' => $lease->id,
-                'tenant_id' => $tenant->id,
-            ],
-            [
-                'relationship' => $data['relationship'] ?? 'other',
-                'note' => $data['note'] ?? null,
-                'move_in_date' => $moveInDate,
-                'move_out_date' => null,
-            ]
-        );
-
-        return $residence;
     }
 
     /**
      * Ghi nhận khách thuê rời phòng và đồng bộ lease_members.
      */
-    public function markTenantLeft(Tenant $tenant, int $ownerId, ?string $moveOutDate = null): Tenant
+    public function markTenantLeft(Tenant $tenant, int $leaseId, ?string $moveOutDate = null): Tenant
     {
-        $residence = $tenant->roomResidents()
-            ->whereIn('status', ['pending', 'active'])
-            ->whereHas('room.property', fn($query) => $query->where('user_id', $ownerId))
-            ->latest()
+        $member = LeaseMember::where('tenant_id', $tenant->id)
+            ->where('lease_id', $leaseId)
+            ->whereNull('move_out_date')
             ->first();
 
-        if (!$residence) {
-            throw new BusinessException('Không tìm thấy thông tin cư trú hiện tại của khách thuê.');
+        if (!$member) {
+            throw new BusinessException('Không tìm thấy khách thuê này trong danh sách ở ghép của hợp đồng này.');
         }
 
         $date = $moveOutDate ?: now()->toDateString();
-
-        DB::transaction(function () use ($residence, $date): void {
-            $residence->update([
-                'status' => 'left',
-                'move_out_date' => $date,
-            ]);
-
-            if ($residence->lease_id) {
-                LeaseMember::where('lease_id', $residence->lease_id)
-                    ->where('tenant_id', $residence->tenant_id)
-                    ->whereNull('move_out_date')
-                    ->update([
-                        'move_out_date' => $date,
-                    ]);
-            }
-        });
+        $member->update(['move_out_date' => $date]);
 
         return $tenant->refresh()->load([
-            'currentResidence.room.property',
-            'currentResidence.lease',
-            'roomResidents.room.property',
+            'leases.room.property',
+            'leaseMembers.lease.room.property',
         ]);
     }
 
-    /**
-     * Kiểm tra khách chưa có cư trú đang hoạt động.
-     */
-    private function ensureTenantHasNoActiveResidence(Tenant $tenant): void
-    {
-        $hasActiveResidence = $tenant->roomResidents()
-            ->whereIn('status', ['pending', 'active'])
-            ->exists();
 
-        if ($hasActiveResidence) {
-            throw new BusinessException('Khách thuê này đang có thông tin cư trú hiện tại.');
-        }
-    }
 
     /**
      * Xóa toàn bộ ảnh CCCD của khách thuê.

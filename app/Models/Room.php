@@ -110,17 +110,7 @@ class Room extends Model
         });
     }
 
-    public function residents(): HasMany
-    {
-        return $this->hasMany(RoomResident::class);
-    }
-
-    public function currentResidents(): HasMany
-    {
-        return $this->hasMany(RoomResident::class)
-            ->where('status', 'active');
-    }
-
+   
     /**
      * Phòng có nhiều hóa đơn.
      */
@@ -129,16 +119,7 @@ class Room extends Model
         return $this->hasMany(Invoice::class);
     }
 
-    /**
-     * CHỈ lấy người đại diện hiện tại của phòng.
-     */
-    public function representative(): HasOne
-    {
-        return $this->hasOne(RoomResident::class)
-            ->where('role', 'representative')
-            ->where('status', 'active') // Đồng nhất với hàm currentResidents của bạn
-            ->latestOfMany();
-    }
+ 
 
     public function activeLease(): HasOne
     {

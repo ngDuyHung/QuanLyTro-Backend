@@ -94,11 +94,6 @@ class Lease extends Model
     }
 
 
-    public function roomResidents(): HasMany
-    {
-        return $this->hasMany(RoomResident::class);
-    }
-
     /**
      * Các dịch vụ cố định được đăng ký sử dụng trong hợp đồng này.
      */

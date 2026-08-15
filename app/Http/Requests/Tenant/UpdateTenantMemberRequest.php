@@ -16,14 +16,29 @@ class UpdateTenantMemberRequest extends FormRequest
 
     public function rules(): array
     {
-        // Lấy ID của tenant đang được sửa từ Route: api/v1/tenant/members/{member}
-        $tenantId = (int) $this->route('member');
+        $tenantData = $this->input('tenant', []);
+        $phone = isset($tenantData['phone']) ? preg_replace('/\D/', '', (string) $tenantData['phone']) : null;
+        $existingTenant = $phone
+            ? \App\Models\Tenant::where('phone', $phone)
+            ->where('owner_id', $this->user()->id) // THÊM ĐIỀU KIỆN NÀY
+            ->first()
+            : null;
+        $tenantId = $existingTenant ? $existingTenant->id : null;
 
         return [
             'full_name' => ['sometimes', 'required', 'string', 'max:100'],
-            'phone' => ['sometimes', 'required', 'string', 'regex:/^[0-9]{9,15}$/', Rule::unique('tenants', 'phone')->ignore($tenantId)],
-            'id_card_number' => ['sometimes', 'required', 'string', 'max:20', Rule::unique('tenants', 'id_card_number')->ignore($tenantId)],
-            
+            'phone' => [
+                'required',
+                'string',
+                'regex:/^[0-9]{9,15}$/',
+                \Illuminate\Validation\Rule::unique('tenants', 'phone')->where('owner_id', $this->user()->id)->ignore($tenantId)
+            ],
+            'id_card_number' => [
+                'nullable',
+                'string',
+                'max:20',
+                \Illuminate\Validation\Rule::unique('tenants', 'id_card_number')->where('owner_id', $this->user()->id)->ignore($tenantId)
+            ],
             'id_card_front_image' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'id_card_back_image' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
 

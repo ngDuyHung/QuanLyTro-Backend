@@ -29,6 +29,8 @@ class FinancialTransactionResource extends JsonResource
             'direction' => $this->direction,
             'direction_label' => $this->direction === 'income' ? 'Thu' : 'Chi',
 
+            'tenant_name_snapshot' => $this->tenant_name_snapshot,
+
             'category' => $this->category,
             'category_label' => $this->categoryLabel((string) $this->category),
 
@@ -47,8 +49,8 @@ class FinancialTransactionResource extends JsonResource
             'transfer_content' => $this->transfer_content,
             'bank_transaction_code' => $this->bank_transaction_code,
             'proof_image' => $this->proof_image
-            ? asset('storage/' . ltrim($this->proof_image, '/'))
-            : null,
+                ? asset('storage/' . ltrim($this->proof_image, '/'))
+                : null,
 
             'confirmed_at' => $this->confirmed_at?->toDateTimeString(),
             'cancelled_at' => $this->cancelled_at?->toDateTimeString(),

@@ -17,6 +17,7 @@ class Tenant extends Model
     protected $table = 'tenants';
 
     protected $fillable = [
+        'owner_id',
         'user_id',
         'full_name',
         'email',
@@ -49,20 +50,17 @@ class Tenant extends Model
         return $this->hasMany(Lease::class);
     }
 
-    public function roomResidents(): HasMany
-    {
-        return $this->hasMany(RoomResident::class);
-    }
-
-    public function currentResidence(): HasOne
-    {
-        return $this->hasOne(RoomResident::class)
-            ->whereIn('status', ['pending', 'active'])
-            ->latestOfMany();
-    }
 
     public function leaseMembers(): HasMany
     {
         return $this->hasMany(LeaseMember::class);
+    }
+
+    /**
+     * Khách thuê thuộc về chủ trọ nào (người sở hữu hồ sơ).
+     */
+    public function owner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'owner_id');
     }
 }

@@ -67,6 +67,10 @@ class InvoiceService
                 'property_id' => $lease->room->property_id,
                 'room_id' => $lease->room_id,
 
+                'tenant_name_snapshot' => $lease->tenant->full_name ?? null,
+                'tenant_phone_snapshot' => $lease->tenant->phone ?? null,
+                'room_name_snapshot' => $lease->room->name ?? null,
+
                 'invoice_code' => $this->generateInvoiceCode((int)$lease->room_id),
                 'invoice_type' => $invoiceType,
 
