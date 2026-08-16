@@ -8,6 +8,7 @@ use App\Exceptions\Domain\BusinessException;
 use App\Models\FinancialTransaction;
 use App\Models\FinancialTransactionAllocation;
 use App\Models\Invoice;
+use App\Models\Lease;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -17,10 +18,36 @@ use Illuminate\Support\Str;
 class TenantInvoiceService
 {
     /**
+     * Tự động lấy Hợp đồng đang hoạt động (Đại diện hoặc Ở ghép)
+     */
+    private function getActiveLease(int $userId, ?int $leaseId = null): Lease
+    {
+        $query = Lease::where('status', 'active')
+            ->where(function (Builder $q) use ($userId) {
+                $q->whereHas('tenant', fn($t) => $t->where('user_id', $userId))
+                  ->orWhereHas('members.tenant', fn($t) => $t->where('user_id', $userId));
+            });
+
+        if ($leaseId) {
+            $query->where('id', $leaseId);
+        }
+
+        $lease = $query->first();
+
+        if (!$lease) {
+            throw new BusinessException('Bạn chưa có hợp đồng thuê phòng nào đang hoạt động để xem hóa đơn.');
+        }
+
+        return $lease;
+    }
+
+    /**
      * Lấy danh sách hóa đơn của người thuê (loại bỏ hóa đơn nháp)
      */
-    public function getTenantInvoices(int $userId, array $filters = [], int $perPage = 15): LengthAwarePaginator
+    public function getTenantInvoices(int $userId, array $filters = [], int $perPage = 15, ?int $leaseId = null): LengthAwarePaginator
     {
+        $lease = $this->getActiveLease($userId, $leaseId);
+
         $query = Invoice::query()
             ->with([
                 'lease:id,room_id,tenant_id,start_date,end_date',
@@ -29,10 +56,7 @@ class TenantInvoiceService
                 'items',
                 'allocations.financialTransaction',
             ])
-            // Đã sửa: Truy vấn xuyên qua lease -> tenant -> user_id
-            ->whereHas('lease.tenant', function (Builder $q) use ($userId): void {
-                $q->where('user_id', $userId);
-            })
+            ->where('lease_id', $lease->id) // Đã sửa: Lọc thẳng qua ID hợp đồng
             ->where('status', '!=', 'draft');
 
         if (!empty($filters['status'])) {
@@ -47,7 +71,6 @@ class TenantInvoiceService
         if (!empty($filters['search'])) {
             $query->where('invoice_code', 'like', '%' . $filters['search'] . '%');
         }
-        // Lọc những hóa đơn có period_from nằm trong tháng được chọn (YYYY-MM)
         if (!empty($filters['filter_month'])) {
             $query->where('period_from', 'like', $filters['filter_month'] . '-%');
         }
@@ -58,8 +81,10 @@ class TenantInvoiceService
     /**
      * Lấy chi tiết một hóa đơn của người thuê
      */
-    public function getTenantInvoice(int $invoiceId, int $userId): Invoice
+    public function getTenantInvoice(int $invoiceId, int $userId, ?int $leaseId = null): Invoice
     {
+        $lease = $this->getActiveLease($userId, $leaseId);
+
         return Invoice::query()
             ->with([
                 'lease.room.property',
@@ -71,18 +96,16 @@ class TenantInvoiceService
                 'financialTransactions',
                 'meterReadings',
             ])
-            // Đã sửa: Truy vấn xuyên qua lease -> tenant -> user_id
-            ->whereHas('lease.tenant', function (Builder $q) use ($userId): void {
-                $q->where('user_id', $userId);
-            })
+            ->where('lease_id', $lease->id) // Đã sửa: Lọc thẳng qua ID hợp đồng
             ->where('status', '!=', 'draft')
             ->findOrFail($invoiceId);
     }
 
-    public function submitProof(int $invoiceId, int $userId, array $data, UploadedFile $file): Invoice
+    public function submitProof(int $invoiceId, int $userId, array $data, UploadedFile $file, ?int $leaseId = null): Invoice
     {
-        $invoice = $this->getTenantInvoice($invoiceId, $userId);
+        $invoice = $this->getTenantInvoice($invoiceId, $userId, $leaseId);
 
+        // ... Các phần dưới (từ dòng if status) giữ nguyên không đổi ...
         if (in_array($invoice->status, ['paid', 'cancelled'])) {
             throw new BusinessException('Hóa đơn đã thanh toán hoặc đã hủy, không thể gửi minh chứng.');
         }
@@ -92,15 +115,12 @@ class TenantInvoiceService
         }
 
         return DB::transaction(function () use ($invoice, $data, $file, $userId) {
-            // 1. Lưu file ảnh minh chứng
             $extension = $file->extension();
             $filename = 'proof_' . time() . '_' . uniqid() . '.' . $extension;
             $path = $file->storeAs("proofs/invoices/{$invoice->id}", $filename, 'public');
 
-            // 2. Tạo mã giao dịch
             $transactionCode = 'PT-' . now()->format('YmdHis') . '-' . strtoupper(Str::random(4));
 
-            // 3. Tạo record thu tiền PENDING
             $transaction = FinancialTransaction::create([
                 'property_id' => $invoice->property_id,
                 'room_id' => $invoice->room_id,
@@ -112,15 +132,14 @@ class TenantInvoiceService
                 'accounting_type' => 'revenue',
                 'amount' => $data['amount'],
                 'method' => 'bank_transfer',
-                'status' => 'pending', // QUAN TRỌNG: Ghi nhận trạng thái chờ duyệt
+                'status' => 'pending',
                 'transaction_date' => $data['transaction_date'],
                 'description' => 'Khách thuê báo cáo thanh toán hóa đơn ' . $invoice->invoice_code,
                 'note' => $data['note'] ?? null,
-                'proof_image' => $path, // Lưu đường dẫn ảnh
+                'proof_image' => $path,
                 'created_by' => $userId,
             ]);
 
-            // 4. Móc nối giao dịch vào hóa đơn (Allocate)
             FinancialTransactionAllocation::create([
                 'financial_transaction_id' => $transaction->id,
                 'invoice_id' => $invoice->id,
@@ -128,7 +147,6 @@ class TenantInvoiceService
                 'allocation_type' => 'payment',
             ]);
 
-            // KHÔNG GỌI refreshPaymentStatus() vì giao dịch chưa được chủ trọ 'confirmed'
             return $invoice->fresh(['allocations.financialTransaction']);
         });
     }

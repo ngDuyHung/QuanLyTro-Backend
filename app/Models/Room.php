@@ -32,6 +32,7 @@ class Room extends Model
         'status',
         'description',
         'amenities',
+        'sort_order'
 
     ];
 
@@ -46,6 +47,7 @@ class Room extends Model
         'is_public'     => 'boolean',
         'status'        => RoomStatus::class,
         'amenities'     => 'array',
+        'sort_order'    => 'integer',
         'created_at'    => 'datetime',
         'updated_at'    => 'datetime',
     ];

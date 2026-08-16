@@ -27,19 +27,22 @@ class TenantMemberController extends Controller
     ) {}
 
     /**
-     * Helper: Tự động tìm Hợp đồng đang Active của khách thuê đăng nhập
+     * Tự động tìm Hợp đồng đang Active của khách thuê đăng nhập (hỗ trợ cả ở ghép)
      */
-    private function getActiveLease(int $userId): Lease
+    private function getActiveLease(int $userId, ?int $leaseId = null): Lease
     {
-        $tenant = Tenant::where('user_id', $userId)->first();
-        if (!$tenant) {
-            throw new BusinessException('Bạn không phải là khách thuê hệ thống.');
+        $query = Lease::with(['room.property'])
+            ->where('status', 'active')
+            ->where(function ($q) use ($userId) {
+                $q->whereHas('tenant', fn($t) => $t->where('user_id', $userId))
+                    ->orWhereHas('members.tenant', fn($t) => $t->where('user_id', $userId));
+            });
+
+        if ($leaseId) {
+            $query->where('id', $leaseId);
         }
 
-        $lease = Lease::with(['room.property'])
-            ->where('tenant_id', $tenant->id)
-            ->where('status', 'active')
-            ->first();
+        $lease = $query->first();
 
         if (!$lease) {
             throw new BusinessException('Bạn không có hợp đồng nào đang hiệu lực để quản lý thành viên.');
@@ -47,19 +50,15 @@ class TenantMemberController extends Controller
 
         return $lease;
     }
-
     /**
      * Lấy danh sách thành viên đang ở ghép trong phòng
      */
     public function index(Request $request): JsonResponse
     {
-        $lease = $this->getActiveLease($request->user()->id);
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $lease = $this->getActiveLease($request->user()->id, $leaseIdHeader ? (int)$leaseIdHeader : null);
 
-        $members = $lease->members()
-            ->with('tenant')
-            ->whereNull('move_out_date') // Chỉ lấy người đang ở
-            ->get();
-
+        $members = $lease->members()->with('tenant')->whereNull('move_out_date')->get();
         return LeaseMemberResource::collection($members)->response();
     }
 
@@ -68,7 +67,8 @@ class TenantMemberController extends Controller
      */
     public function store(StoreTenantMemberRequest $request): JsonResponse
     {
-        $lease = $this->getActiveLease($request->user()->id);
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $lease = $this->getActiveLease($request->user()->id, $leaseIdHeader ? (int)$leaseIdHeader : null);
 
         return DB::transaction(function () use ($request, $lease): JsonResponse {
             // 1. Kiểm tra sức chứa (Max Occupants)
@@ -96,7 +96,9 @@ class TenantMemberController extends Controller
             // ------------------------------------
 
             // 2. Tạo Profile Tenant (Đưa mảng $data đã có user_id vào)
-            $tenant = $this->tenantService->createProfile($data);
+            // lấy id chủ trọ để gắn vào tenant (để sau này chủ trọ có thể quản lý được)
+            $landlordId = $lease->room->property->user_id;
+            $tenant = $this->tenantService->createProfile($data, $landlordId);
 
             // 3. Gắn vào phòng và hợp đồng (tái sử dụng Core Service)
             $this->tenantService->createMemberResidence(
@@ -126,7 +128,8 @@ class TenantMemberController extends Controller
      */
     public function update(UpdateTenantMemberRequest $request, int $tenantId): JsonResponse
     {
-        $lease = $this->getActiveLease($request->user()->id);
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $lease = $this->getActiveLease($request->user()->id, $leaseIdHeader ? (int)$leaseIdHeader : null);
 
         // Đảm bảo thành viên này thuộc hợp đồng của người đăng nhập
         $member = LeaseMember::with('tenant')
@@ -168,8 +171,9 @@ class TenantMemberController extends Controller
      */
     public function destroy(Request $request, int $tenantId): JsonResponse
     {
-        $lease = $this->getActiveLease($request->user()->id);
-
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $lease = $this->getActiveLease($request->user()->id, $leaseIdHeader ? (int)$leaseIdHeader : null);
+        
         $member = LeaseMember::where('lease_id', $lease->id)
             ->where('tenant_id', $tenantId)
             ->whereNull('move_out_date')

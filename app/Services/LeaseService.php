@@ -239,13 +239,6 @@ class LeaseService
                 'status'      => 'active',
             ]);
 
-            // Đã sửa lại đúng cấu trúc trường của bảng lease_members trong SQL (dùng relationship thay vì role)
-            $lease->members()->create([
-                'tenant_id'    => $tenant->id,
-                'relationship' => 'other',
-                'move_in_date' => $data['lease_start_date'],
-            ]);
-
 
             \App\Models\MeterReading::create([
                 'lease_id'         => $lease->id,
@@ -333,7 +326,7 @@ class LeaseService
         // 2. Lưu vết thông tin vào bảng thành viên hợp đồng lease_members (Mối quan hệ là bạn bè/ở ghép)
         $lease->members()->create([
             'tenant_id'    => $tenant->id,
-            'relationship' => 'friend',
+            'relationship' => 'roommate', // mặc định là ở ghép
             'move_in_date' => $data['lease_start_date'],
         ]);
     }

@@ -40,7 +40,7 @@ class Sheet2RoomExport implements FromCollection, WithStyles, ShouldAutoSize, Wi
                 '📌 HƯỚNG DẪN SHEET 2: Khai báo danh sách các Phòng. ' .
                     '⚠️ QUAN TRỌNG: Các phòng thuộc cùng 1 khu nhà bắt buộc phải được nhập LIỀN KỀ NHAU (không nhập xen kẽ).'
             ],
-            ['Mã khu nhà (*)', 'Tên/Số phòng (*)', 'Giá thuê phòng (*)', 'Tiền cọc/Thế chân', 'Tầng số', 'Trạng thái phòng (*)', 'Diện tích (m2)', 'Số người tối đa', 'Ngày thu tiền', 'Cho ở ghép? (*)', 'Đăng công khai? (*)'],
+            ['Mã khu nhà (*)', 'Tên/Số phòng (*)', 'Giá thuê phòng (*)', 'Tiền cọc/Thế chân', 'Tầng số', 'Trạng thái phòng (*)', 'Diện tích (m2)', 'Số người tối đa', 'Ngày thu tiền', 'Cho ở ghép? (*)', 'Đăng công khai? (*)', 'Thứ tự'],
         ]);
 
         // 2. Truy vấn dữ liệu thực tế và lấy kèm Property. 
@@ -57,9 +57,9 @@ class Sheet2RoomExport implements FromCollection, WithStyles, ShouldAutoSize, Wi
 
         // 3. Nếu KHÔNG CÓ dữ liệu -> Xuất dữ liệu mẫu (Fallback)
         if ($rooms->isEmpty()) {
-            $data->push(['KH-01', 'P.101', 3500000, 100000, 1, 'Còn trống', 25, 5, 12, 'Có', 'Có']);
-            $data->push(['KH-01', 'P.102', 3500000, 100000, 1, 'Còn trống', 25, 5, 12, 'Có', 'Có']);
-            $data->push(['KH-02', 'CH-01', 5000000, 100000, 1, 'Đã cho thuê', 40, 4, 5, 'Không', 'Có']);
+            $data->push(['KH-01', 'P.101', 3500000, 100000, 1, 'Còn trống', 25, 5, 12, 'Có', 'Có', 0]);
+            $data->push(['KH-01', 'P.102', 3500000, 100000, 1, 'Còn trống', 25, 5, 12, 'Có', 'Có', 1]);
+            $data->push(['KH-02', 'CH-01', 5000000, 100000, 1, 'Đã cho thuê', 40, 4, 5, 'Không', 'Có', 2]);
         } else {
             // 4. Nếu CÓ dữ liệu -> Map và Dịch ngược Enum
             $statusMap = [
@@ -88,6 +88,7 @@ class Sheet2RoomExport implements FromCollection, WithStyles, ShouldAutoSize, Wi
                     (int)($room->billing_day ?? 1),
                     $room->allow_shared ? 'Có' : 'Không',
                     $room->is_public ? 'Có' : 'Không',
+                    (int)($room->sort_order ?? 0),
                 ]);
             }
         }
@@ -97,18 +98,18 @@ class Sheet2RoomExport implements FromCollection, WithStyles, ShouldAutoSize, Wi
 
     public function styles(Worksheet $sheet): array
     {
-        $sheet->mergeCells('A1:K1');
+        $sheet->mergeCells('A1:L1');
         $sheet->getRowDimension(1)->setRowHeight(30);
         $sheet->getStyle('A1')->getFont()->setBold(true)->getColor()->setARGB('C00000');
         $sheet->getStyle('A1')->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
 
         $sheet->getRowDimension(2)->setRowHeight(25);
-        $sheet->getStyle('A2:K2')->getFont()->setBold(true);
-        $sheet->getStyle('A2:K2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('E2EFDA');
+        $sheet->getStyle('A2:L2')->getFont()->setBold(true);
+        $sheet->getStyle('A2:L2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('E2EFDA');
 
         // Vẽ Border động tùy theo số lượng dòng thực tế
         $highestRow = $sheet->getHighestRow();
-        $sheet->getStyle("A1:K{$highestRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('BFBFBF');
+        $sheet->getStyle("A1:L{$highestRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('BFBFBF');
 
         // Đảm bảo cột Giá tiền (Cột C) có phân tách hàng nghìn
         $sheet->getStyle("C3:C{$highestRow}")->getNumberFormat()->setFormatCode('#,##0');

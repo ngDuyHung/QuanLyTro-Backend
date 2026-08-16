@@ -14,6 +14,7 @@ class PublicRoomResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'sort_order' => $this->sort_order,
             'floor_number' => $this->floor_number,
             'area' => $this->area ? (float) $this->area : null,
             'max_occupants' => $this->max_occupants,

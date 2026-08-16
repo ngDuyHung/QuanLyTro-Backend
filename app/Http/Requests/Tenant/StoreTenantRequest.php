@@ -51,7 +51,7 @@ class StoreTenantRequest extends FormRequest
             // Thông tin ở ghép
             'relationship' => [
                 'nullable',
-                Rule::in(['spouse', 'child', 'parent', 'sibling', 'friend', 'other']),
+                Rule::in(['spouse', 'child', 'parent', 'sibling', 'friend','roommate', 'other']),
             ],
             'move_in_date' => ['nullable', 'date'],
             'note' => ['nullable', 'string', 'max:255'],

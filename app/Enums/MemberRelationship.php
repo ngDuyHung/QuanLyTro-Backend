@@ -12,6 +12,7 @@ enum MemberRelationship: string
     case Sibling = 'sibling';
     case Friend  = 'friend';
     case Other   = 'other';
+    case Roommate = 'roommate';
 
     public function label(): string
     {
@@ -22,6 +23,7 @@ enum MemberRelationship: string
             self::Sibling => 'Anh/Chị/Em',
             self::Friend  => 'Bạn bè',
             self::Other   => 'Khác',
+            self::Roommate => 'Người ở ghép'
         };
     }
 

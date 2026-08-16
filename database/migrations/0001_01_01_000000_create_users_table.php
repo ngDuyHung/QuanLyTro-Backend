@@ -26,7 +26,7 @@ return new class extends Migration
             $table->id()->comment('ID người dùng');
             $table->string('name')->comment('Tên người dùng');
 
-            $table->string('phone', 10)
+            $table->string('phone', 15)
                 ->unique()
                 ->comment('Số điện thoại unique, dùng để đăng nhập');
 

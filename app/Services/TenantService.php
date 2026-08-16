@@ -127,7 +127,7 @@ class TenantService
         return LeaseMember::create([
             'lease_id' => $lease->id,
             'tenant_id' => $tenant->id,
-            'relationship' => $data['relationship'] ?? 'other',
+            'relationship' => $data['relationship'] ?? 'roommate',
             'note' => $data['note'] ?? null,
             'move_in_date' => $moveInDate,
             'move_out_date' => null,
@@ -150,6 +150,12 @@ class TenantService
 
         $date = $moveOutDate ?: now()->toDateString();
         $member->update(['move_out_date' => $date]);
+
+        // //  Tự động trừ occupants_count trong bảng leases
+        //     $lease = Lease::find($leaseId);
+        //     if ($lease && $lease->occupants_count > 1) {
+        //         $lease->decrement('occupants_count');
+        //     }
 
         return $tenant->refresh()->load([
             'leases.room.property',

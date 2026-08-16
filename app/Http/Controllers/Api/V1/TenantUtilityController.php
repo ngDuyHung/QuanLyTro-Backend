@@ -20,11 +20,13 @@ class TenantUtilityController extends Controller
     public function index(Request $request): JsonResponse
     {
         $filters = $request->only(['type', 'month']);
+        $leaseId = $request->header('X-Lease-Id') ? (int) $request->header('X-Lease-Id') : null; // ĐỌC HEADER
         
         $readings = $this->tenantUtilityService->getTenantReadings(
             userId: $request->user()->id,
             filters: $filters,
-            perPage: $request->integer('per_page', 15)
+            perPage: $request->integer('per_page', 15),
+            leaseId: $leaseId // TRUYỀN XUỐNG SERVICE
         );
 
         return UtilityResource::collection($readings)->response();
@@ -32,14 +34,16 @@ class TenantUtilityController extends Controller
 
     public function currentReadings(Request $request): JsonResponse
     {
-        $data = $this->tenantUtilityService->getCurrentReadings($request->user()->id);
+        $leaseId = $request->header('X-Lease-Id') ? (int) $request->header('X-Lease-Id') : null;
+        $data = $this->tenantUtilityService->getCurrentReadings($request->user()->id, $leaseId);
         
         return response()->json(['data' => $data]);
     }
 
     public function show(Request $request, int $id): JsonResponse
     {
-        $reading = $this->tenantUtilityService->getReadingDetail($id, $request->user()->id);
+        $leaseId = $request->header('X-Lease-Id') ? (int) $request->header('X-Lease-Id') : null;
+        $reading = $this->tenantUtilityService->getReadingDetail($id, $request->user()->id, $leaseId);
         
         return (new UtilityResource($reading))->response();
     }
@@ -50,7 +54,7 @@ class TenantUtilityController extends Controller
             'reading_date' => ['required', 'date'],
             'electricity_reading' => ['nullable', 'numeric', 'min:0'],
             'water_reading' => ['nullable', 'numeric', 'min:0'],
-            'electricity_image' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'], // max 5MB
+            'electricity_image' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
             'water_image' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
             'note' => ['nullable', 'string', 'max:255'],
         ]);
@@ -59,11 +63,14 @@ class TenantUtilityController extends Controller
             throw new BusinessException('Vui lòng nhập ít nhất một chỉ số (điện hoặc nước).');
         }
 
+        $leaseId = $request->header('X-Lease-Id') ? (int) $request->header('X-Lease-Id') : null;
+
         $this->tenantUtilityService->submitBatch(
             userId: $request->user()->id,
             data: $data,
             elecImage: $request->file('electricity_image'),
-            waterImage: $request->file('water_image')
+            waterImage: $request->file('water_image'),
+            leaseId: $leaseId // TRUYỀN XUỐNG SERVICE
         );
 
         return response()->json([

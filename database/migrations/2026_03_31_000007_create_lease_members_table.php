@@ -26,7 +26,7 @@ return new class extends Migration
             $table->unsignedBigInteger('tenant_id')
                 ->comment('FK tenants - Trỏ về thông tin cư dân');
 
-            $table->enum('relationship', ['spouse', 'child', 'parent', 'sibling', 'friend', 'other'])
+            $table->enum('relationship', ['spouse', 'child', 'parent', 'sibling', 'friend','roommate', 'other'])
                 ->default('other')
                 ->comment('Quan hệ với người đứng tên hợp đồng');
 

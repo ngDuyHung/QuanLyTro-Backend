@@ -166,7 +166,7 @@ class TenantController extends Controller
                     tenant: $tenant,
                     lease: $lease,
                     data: [
-                        'relationship' => $data['relationship'] ?? 'other',
+                        'relationship' => $data['relationship'] ?? 'roommate',
                         'move_in_date' => $data['move_in_date'] ?? now()->toDateString(),
                         'note' => $data['note'] ?? null,
                     ]

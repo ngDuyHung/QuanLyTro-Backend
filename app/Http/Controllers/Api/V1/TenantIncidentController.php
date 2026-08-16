@@ -20,11 +20,15 @@ class TenantIncidentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $filters = $request->only(['status']);
+        
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $leaseId = $leaseIdHeader ? (int) $leaseIdHeader : null;
 
         $incidents = $this->tenantIncidentService->getTenantIncidents(
             userId: $request->user()->id,
             filters: $filters,
-            perPage: $request->integer('per_page', 15)
+            perPage: $request->integer('per_page', 15),
+            leaseId: $leaseId 
         );
 
         return IncidentResource::collection($incidents)->response();
@@ -32,10 +36,14 @@ class TenantIncidentController extends Controller
 
     public function store(TenantStoreIncidentRequest $request): JsonResponse
     {
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $leaseId = $leaseIdHeader ? (int) $leaseIdHeader : null;
+
         $incident = $this->tenantIncidentService->createIncident(
             data: $request->validated(),
             images: $request->file('images', []),
-            userId: $request->user()->id
+            userId: $request->user()->id,
+            leaseId: $leaseId // TRUYỀN THÊM BIẾN NÀY
         );
 
         return (new IncidentResource($incident))
@@ -46,7 +54,11 @@ class TenantIncidentController extends Controller
 
     public function show(Request $request, int $id): JsonResponse
     {
-        $incident = $this->tenantIncidentService->getTenantIncident($id, $request->user()->id);
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $leaseId = $leaseIdHeader ? (int) $leaseIdHeader : null;
+
+        $incident = $this->tenantIncidentService->getTenantIncident($id, $request->user()->id, $leaseId);
+        
         return (new IncidentResource($incident))->response();
     }
 
@@ -59,7 +71,10 @@ class TenantIncidentController extends Controller
             'priority' => ['required', 'string', 'in:low,normal,high,emergency'],
         ]);
 
-        $incident = $this->tenantIncidentService->updateIncident($id, $data, $request->user()->id);
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $leaseId = $leaseIdHeader ? (int) $leaseIdHeader : null;
+
+        $incident = $this->tenantIncidentService->updateIncident($id, $data, $request->user()->id, $leaseId);
 
         return (new IncidentResource($incident))
             ->additional(['message' => 'Cập nhật sự cố thành công.'])
@@ -68,7 +83,10 @@ class TenantIncidentController extends Controller
 
     public function cancel(Request $request, int $id): JsonResponse
     {
-        $incident = $this->tenantIncidentService->cancelIncident($id, $request->user()->id);
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $leaseId = $leaseIdHeader ? (int) $leaseIdHeader : null;
+
+        $incident = $this->tenantIncidentService->cancelIncident($id, $request->user()->id, $leaseId);
 
         return (new IncidentResource($incident))
             ->additional(['message' => 'Đã hủy báo cáo sự cố.'])

@@ -299,27 +299,32 @@ class DashboardService
     /**
      * Lấy toàn bộ dữ liệu tổng quan cho Dashboard của Khách thuê
      */
-    public function getTenantDashboardData(int $userId): array
+    public function getTenantDashboardData(int $userId, ?int $leaseId = null): array
     {
-        // 1. Tìm thông tin khách thuê từ tài khoản đăng nhập
-        $tenant = Tenant::where('user_id', $userId)->first();
+        // 1 & 2. Lấy hợp đồng đang hoạt động (Bao gồm cả người đại diện HOẶC người ở ghép)
+        $query = Lease::with(['room.property'])
+            ->where('status', 'active')
+            ->where(function ($q) use ($userId) {
+                $q->whereHas('tenant', fn($t) => $t->where('user_id', $userId))
+                    ->orWhereHas('members.tenant', fn($t) => $t->where('user_id', $userId));
+            });
 
-        if (!$tenant) {
-            return ['error' => 'Tài khoản của bạn chưa được liên kết với hồ sơ khách thuê nào.'];
+        // Nếu Frontend có truyền ID hợp đồng cụ thể (từ Header Dropdown)
+        if ($leaseId) {
+            $query->where('id', $leaseId);
         }
 
-        // 2. Lấy hợp đồng đang hoạt động kèm thông tin Phòng và Khu nhà
-        $activeLease = Lease::with(['room.property'])
-            ->where('tenant_id', $tenant->id)
-            ->where('status', 'active')
-            ->first();
+        $activeLease = $query->first();
 
         if (!$activeLease) {
-            return ['error' => 'Bạn hiện không có hợp đồng thuê phòng nào đang hoạt động.'];
+            return ['error' => 'Bạn hiện không có hợp đồng thuê phòng nào đang hoạt động hoặc không có quyền truy cập.'];
         }
 
         $roomId = $activeLease->room_id;
         $propertyId = $activeLease->room->property_id;
+
+        // Tìm thông tin khách thuê (Profile) để query sự cố do chính người này báo cáo
+        $tenant = Tenant::where('user_id', $userId)->first();
 
         // 3. Truy vấn các dữ liệu liên quan
 

@@ -62,7 +62,9 @@ class RoomController extends Controller
                 $request->status,
                 fn($q) => $q->where('status', $request->status)
             )
-            ->latest()
+            // Sắp xếp theo sort_order tăng dần, nếu bằng nhau thì lấy id mới nhất
+            ->orderBy('sort_order', 'asc')
+            ->orderBy('id', 'desc')
             ->paginate($request->integer('per_page', 15));
         return RoomResource::collection($rooms)->response();
     }
@@ -111,6 +113,8 @@ class RoomController extends Controller
             })
             ->when($request->filled('sort'), function ($query) use ($request) {
                 match ($request->sort) {
+                    'sort_order_asc' => $query->orderBy('sort_order', 'asc'),
+                    'sort_order_desc' => $query->orderBy('sort_order', 'desc'),
                     'price_asc' => $query->orderBy('current_price', 'asc'),
                     'price_desc' => $query->orderBy('current_price', 'desc'),
                     'name_asc' => $query->orderBy('name', 'asc'),
@@ -119,8 +123,8 @@ class RoomController extends Controller
                     default => $query->orderBy('created_at', 'desc'), // created_at_desc
                 };
             }, function ($query) {
-                // Mặc định nếu không gửi tham số sort
-                $query->orderBy('created_at', 'desc');
+                // Mặc định nếu Frontend KHÔNG gửi tham số sort
+                $query->orderBy('sort_order', 'asc')->orderBy('id', 'desc');
             })
             ->paginate($request->integer('per_page', 10));
 
@@ -334,10 +338,7 @@ class RoomController extends Controller
         if ($room->reservations()->exists()) {
             throw new BusinessException('Không thể xóa phòng đang có lịch sử cọc giữ chỗ.');
         }
-        // Kiểm tra lịch sử cư dân
-        if ($room->residents()->exists()) {
-            throw new BusinessException('Không thể xóa phòng đã từng có thông tin cư dân lưu trú.');
-        }
+        
         $pathsToDeleteAfterCommit = [];
 
         try {

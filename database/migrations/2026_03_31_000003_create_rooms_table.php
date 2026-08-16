@@ -54,7 +54,7 @@ return new class extends Migration
                 ->comment('Ngày thu tiền hằng tháng, NULL = theo cấu hình khu nhà');
 
             $table->boolean('allow_shared')
-                ->default(false)
+                ->default(true)
                 ->comment('Cho phép ở ghép');
 
             $table->boolean('is_public')
@@ -73,6 +73,8 @@ return new class extends Migration
                 ->nullable()
                 ->comment('Danh sách tiện ích của phòng (VD: ["air_conditioner", "balcony"])');
 
+            $table->integer('sort_order')->default(0)->comment('Thứ tự hiển thị (0 là mặc định)');
+
             $table->timestamps();
 
             $table->unique(['property_id', 'name'], 'uq_property_room_name');
@@ -88,6 +90,7 @@ return new class extends Migration
             $table->index('is_public');
             $table->index('status');
             $table->index(['property_id', 'status'], 'idx_rooms_property_status');
+            $table->index('sort_order');
         });
     }
 

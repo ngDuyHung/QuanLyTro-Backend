@@ -109,7 +109,7 @@ class Sheet3LeaseTenantImport implements ToCollection
                 'tenant_email'          => $data[6],
                 'lease_start_date'      => $data[7],
             ];
-            $this->leaseService->addRoommateFromImport($roomId, $leaseId, $mappedRoommateData);
+            $this->leaseService->addRoommateFromImport($roomId, $leaseId, $mappedRoommateData, $this->userId);
 
             // 3. Xử lý kịch bản: Khách Đại Diện
         } else {
@@ -139,7 +139,7 @@ class Sheet3LeaseTenantImport implements ToCollection
                 ]
             ];
 
-            $lease = $this->leaseService->createFromImport($room->id, $mappedLeaseData);
+            $lease = $this->leaseService->createFromImport($room->id, $mappedLeaseData, $this->userId);
 
             // Cập nhật trạng thái phòng thành Đã cho thuê
             $room->update(['status' => 'occupied']);

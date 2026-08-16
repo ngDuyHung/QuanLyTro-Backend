@@ -249,6 +249,7 @@ class RoomService
             'allow_shared'  => !empty($data['room_allow_shared']),
             'is_public'     => !empty($data['room_is_public']),
             'description'   => $data['room_description'] ?? null,
+            'sort_order'    => !empty($data['room_sort_order']) ? (int)$data['room_sort_order'] : 0,
         ]);
 
         // Ghi lịch sử giá nếu là kịch bản đầy đủ

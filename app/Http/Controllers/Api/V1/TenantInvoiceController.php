@@ -25,26 +25,34 @@ class TenantInvoiceController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        // Lọc các tham số từ query string chỉ lấy những tham số như status, period_from, period_to, search
         $filters = $request->only(['status','filter_month', 'period_from', 'period_to', 'search']);
+
+        // Đọc Lease ID từ Header
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $leaseId = $leaseIdHeader ? (int) $leaseIdHeader : null;
 
         $invoices = $this->tenantInvoiceService->getTenantInvoices(
             userId: $request->user()->id,
             filters: $filters,
-            perPage: $request->integer('per_page', 15)
+            perPage: $request->integer('per_page', 15),
+            leaseId: $leaseId // Truyền thêm leaseId
         );
 
         return InvoiceResource::collection($invoices)->response();
     }
 
     /**
-     * Xem chi tiết hóa đơn (Dùng cho nửa bên trái của Modal thanh toán)
+     * Xem chi tiết hóa đơn
      */
     public function show(Request $request, int $id): JsonResponse
     {
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $leaseId = $leaseIdHeader ? (int) $leaseIdHeader : null;
+
         $invoice = $this->tenantInvoiceService->getTenantInvoice(
             invoiceId: $id,
-            userId: $request->user()->id
+            userId: $request->user()->id,
+            leaseId: $leaseId // Truyền thêm leaseId
         );
 
         return (new InvoiceResource($invoice))->response();
@@ -52,31 +60,30 @@ class TenantInvoiceController extends Controller
 
     /**
      * Lấy thông tin tài khoản ngân hàng & cấu hình QR của Chủ trọ 
-     * (Dùng cho nửa bên phải của Modal thanh toán)
      */
     public function paymentConfig(Request $request, int $id): JsonResponse
     {
-        // 1. Lấy hóa đơn để xác định chủ trọ là ai
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $leaseId = $leaseIdHeader ? (int) $leaseIdHeader : null;
+
         $invoice = $this->tenantInvoiceService->getTenantInvoice(
             invoiceId: $id,
-            userId: $request->user()->id
+            userId: $request->user()->id,
+            leaseId: $leaseId // Truyền thêm leaseId
         );
 
         $landlordId = $invoice->property->user_id;
 
-        // 2. Lấy danh sách ngân hàng đang kích hoạt của chủ trọ
         $bankAccounts = BankAccount::query()
             ->where('user_id', $landlordId)
             ->where('is_default', 1)
             ->get();
 
-        // 3. Lấy cấu hình SePay của chủ trọ (Sửa lại cách gọi tại đây)
         $sepayConfig = SepayConfig::forUser((int)$landlordId)->toArray();
 
         return response()->json([
             'success' => true,
             'data' => [
-                //Bọc $bankAccounts qua BankAccountResource để sinh sepay_qr_template
                 'bank_accounts' => BankAccountResource::collection($bankAccounts),
                 'sepay_config' => $sepayConfig
             ]
@@ -84,17 +91,19 @@ class TenantInvoiceController extends Controller
     }
 
     /**
-     * Xem bản in điện tử HTML (Chỉ dành cho hóa đơn đã thanh toán xong)
+     * Xem bản in điện tử HTML 
      */
     public function previewHtml(Request $request, int $id, SettingService $settingService): JsonResponse
     {
-        // Kiểm tra quyền sở hữu hóa đơn của khách thuê trước
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $leaseId = $leaseIdHeader ? (int) $leaseIdHeader : null;
+
         $invoice = $this->tenantInvoiceService->getTenantInvoice(
             invoiceId: $id,
-            userId: $request->user()->id
+            userId: $request->user()->id,
+            leaseId: $leaseId // Truyền thêm leaseId
         );
 
-        // Biên dịch HTML dựa trên setting của chủ trọ
         $landlordId = $invoice->property->user_id;
         $html = $settingService->compileInvoiceHtml($invoice->id, (int) $landlordId);
 
@@ -102,17 +111,19 @@ class TenantInvoiceController extends Controller
     }
 
     /**
-     * Polling kiểm tra trạng thái thanh toán tự động cho Khách thuê
+     * Polling kiểm tra trạng thái thanh toán tự động
      */
     public function paymentStatus(Request $request, int $id): JsonResponse
     {
-        // 1. Kiểm tra hóa đơn này có thuộc về khách thuê đang đăng nhập hay không
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $leaseId = $leaseIdHeader ? (int) $leaseIdHeader : null;
+
         $invoice = $this->tenantInvoiceService->getTenantInvoice(
             invoiceId: $id,
-            userId: $request->user()->id
+            userId: $request->user()->id,
+            leaseId: $leaseId // Truyền thêm leaseId
         );
 
-        // 2. Chỉ cần trả về thông tin paid_amount và status hiện tại của hóa đơn
         return response()->json([
             'success' => true,
             'data' => [
@@ -127,15 +138,19 @@ class TenantInvoiceController extends Controller
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:1'],
             'transaction_date' => ['required', 'date'],
-            'proof_image' => ['required', 'image', 'mimes:jpeg,png,jpg', 'max:5120'], // Max 5MB
+            'proof_image' => ['required', 'image', 'mimes:jpeg,png,jpg', 'max:5120'], 
             'note' => ['nullable', 'string', 'max:255'],
         ]);
+
+        $leaseIdHeader = $request->header('X-Lease-Id');
+        $leaseId = $leaseIdHeader ? (int) $leaseIdHeader : null;
 
         $invoice = $this->tenantInvoiceService->submitProof(
             invoiceId: $id,
             userId: $request->user()->id,
             data: $data,
-            file: $request->file('proof_image')
+            file: $request->file('proof_image'),
+            leaseId: $leaseId // Truyền thêm leaseId
         );
 
         return response()->json([

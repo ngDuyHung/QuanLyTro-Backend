@@ -31,7 +31,7 @@ class Sheet2RoomImport implements ToCollection
             if ($index < 2) continue;
 
             $actualRowNumber = $index + 1;
-            $rowData = array_pad($row->toArray(), 10, null);
+            $rowData = array_pad($row->toArray(), 12, null);
 
             if (empty($rowData[0]) || empty($rowData[1])) continue;
 
@@ -43,9 +43,10 @@ class Sheet2RoomImport implements ToCollection
                     '2' => ['required', 'integer', 'min:0'],
                     '3' => ['nullable', 'integer'],
                     '5' => ['required', 'string', 'in:Còn trống,Đang bảo trì,Đã cho thuê,Đã đặt cọc'],
+                    '11' => ['nullable', 'integer', 'min:0'],
                 ],
                 ['required' => '[:attribute] bắt buộc nhập.', 'integer' => '[:attribute] phải là số nguyên.'],
-                ['0' => 'Mã khu nhà', '1' => 'Tên phòng', '2' => 'Giá thuê', '3' => 'Tiền cọc', '5' => 'Trạng thái phòng']
+                ['0' => 'Mã khu nhà', '1' => 'Tên phòng', '2' => 'Giá thuê', '3' => 'Tiền cọc', '5' => 'Trạng thái phòng', '11' => 'Thứ tự']
             );
 
             if ($validator->fails()) {
@@ -78,6 +79,7 @@ class Sheet2RoomImport implements ToCollection
                         'room_billing_day'   => $rowData[8],
                         'room_allow_shared'  => (trim((string)$rowData[9]) === 'Có') ? 1 : 0,
                         'room_is_public'     => (trim((string)$rowData[10]) === 'Có') ? 1 : 0,
+                        'room_sort_order'    => !is_null($rowData[11]) ? (int)$rowData[11] : 0,
                     ];
 
                     $this->roomService->createFromImport($this->propertyCache[$propertyCode], $this->userId, $mappedData, false);

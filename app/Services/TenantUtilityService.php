@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Exceptions\Domain\BusinessException;
 use App\Models\Lease;
 use App\Models\MeterReading;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -18,14 +19,22 @@ class TenantUtilityService
     ) {}
 
     /**
-     * Tự động lấy hợp đồng đang hoạt động của khách thuê
+     * Tự động lấy hợp đồng đang hoạt động của khách thuê (hỗ trợ cả ở ghép)
      */
-    private function getActiveLease(int $userId): Lease
+    private function getActiveLease(int $userId, ?int $leaseId = null): Lease
     {
-        $lease = Lease::with(['room:id,name,property_id', 'room.property:id,name'])
-            ->whereHas('tenant', fn($q) => $q->where('user_id', $userId))
+        $query = Lease::with(['room:id,name,property_id', 'room.property:id,name'])
             ->where('status', 'active')
-            ->first();
+            ->where(function (Builder $q) use ($userId) {
+                $q->whereHas('tenant', fn($t) => $t->where('user_id', $userId))
+                  ->orWhereHas('members.tenant', fn($t) => $t->where('user_id', $userId));
+            });
+
+        if ($leaseId) {
+            $query->where('id', $leaseId);
+        }
+
+        $lease = $query->first();
 
         if (!$lease) {
             throw new BusinessException('Bạn chưa có hợp đồng thuê phòng nào đang hoạt động.');
@@ -37,9 +46,9 @@ class TenantUtilityService
     /**
      * Lấy danh sách lịch sử chốt số của phòng đang ở
      */
-    public function getTenantReadings(int $userId, array $filters, int $perPage): LengthAwarePaginator
+    public function getTenantReadings(int $userId, array $filters, int $perPage, ?int $leaseId = null): LengthAwarePaginator
     {
-        $lease = $this->getActiveLease($userId);
+        $lease = $this->getActiveLease($userId, $leaseId);
 
         $query = MeterReading::with(['lease.room.property'])
             ->where('lease_id', $lease->id);
@@ -59,9 +68,9 @@ class TenantUtilityService
     /**
      * Lấy chỉ số cũ gần nhất để hiển thị ra UI cho khách dễ nhập
      */
-    public function getCurrentReadings(int $userId): array
+    public function getCurrentReadings(int $userId, ?int $leaseId = null): array
     {
-        $lease = $this->getActiveLease($userId);
+        $lease = $this->getActiveLease($userId, $leaseId);
 
         $elec = MeterReading::where('lease_id', $lease->id)->where('type', 'electricity')->orderByDesc('reading_date')->orderByDesc('id')->first();
         $water = MeterReading::where('lease_id', $lease->id)->where('type', 'water')->orderByDesc('reading_date')->orderByDesc('id')->first();
@@ -77,14 +86,14 @@ class TenantUtilityService
     /**
      * Submit gộp cả Điện và Nước vào chung 1 lần bấm
      */
-    public function submitBatch(int $userId, array $data, ?UploadedFile $elecImage, ?UploadedFile $waterImage): void
+    public function submitBatch(int $userId, array $data, ?UploadedFile $elecImage, ?UploadedFile $waterImage, ?int $leaseId = null): void
     {
-        $lease = $this->getActiveLease($userId);
+        $lease = $this->getActiveLease($userId, $leaseId);
 
+        // ... Các phần dưới giữ nguyên không đổi ...
         $readingDate = $data['reading_date'];
-        $month = substr($readingDate, 0, 7); // Format: YYYY-MM
+        $month = substr($readingDate, 0, 7); 
 
-        // Check xem trong tháng này khách đã tự chốt lần nào chưa
         $existing = MeterReading::where('lease_id', $lease->id)
             ->where('reading_date', 'like', $month . '%')
             ->exists();
@@ -94,7 +103,6 @@ class TenantUtilityService
         }
 
         DB::transaction(function () use ($lease, $data, $elecImage, $waterImage) {
-            // 1. Chốt Điện
             if (isset($data['electricity_reading']) && $data['electricity_reading'] !== '') {
                 $this->utilityService->createReading([
                     'lease_id' => $lease->id,
@@ -106,7 +114,6 @@ class TenantUtilityService
                 ]);
             }
 
-            // 2. Chốt Nước
             if (isset($data['water_reading']) && $data['water_reading'] !== '') {
                 $this->utilityService->createReading([
                     'lease_id' => $lease->id,
@@ -123,9 +130,9 @@ class TenantUtilityService
     /**
      * Xem chi tiết 1 bản ghi
      */
-    public function getReadingDetail(int $id, int $userId): MeterReading
+    public function getReadingDetail(int $id, int $userId, ?int $leaseId = null): MeterReading
     {
-        $lease = $this->getActiveLease($userId);
+        $lease = $this->getActiveLease($userId, $leaseId);
 
         return MeterReading::with(['lease.room.property'])
             ->where('lease_id', $lease->id)

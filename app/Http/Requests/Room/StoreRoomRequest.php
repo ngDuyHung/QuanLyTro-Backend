@@ -33,6 +33,7 @@ class StoreRoomRequest extends FormRequest
             'description'   => ['nullable', 'string'],
 
             'amenities'   => ['nullable', 'array'],
+            'sort_order' => ['nullable', 'integer', 'min:0'],
             'amenities.*' => ['string', 'max:50'],
             'images' => ['nullable', 'array', 'max:5'],
 
@@ -85,6 +86,9 @@ class StoreRoomRequest extends FormRequest
             'cover_image_index.integer' => 'Chỉ số ảnh bìa phải là số nguyên.',
             'cover_image_index.min' => 'Chỉ số ảnh bìa không hợp lệ.',
             'cover_image_index.max' => 'Chỉ số ảnh bìa không hợp lệ.',
+
+            'sort_order.integer' => 'Thứ tự hiển thị phải là số nguyên.',
+            'sort_order.min' => 'Thứ tự hiển thị không được âm.',
         ];
     }
 
@@ -104,6 +108,7 @@ class StoreRoomRequest extends FormRequest
             'description'   => 'mô tả',
             'images'        => 'ảnh',
             'cover_image_index' => 'chỉ số ảnh bìa',
+            'sort_order' => 'thứ tự hiển thị',
         ];
     }
 
@@ -116,6 +121,10 @@ class StoreRoomRequest extends FormRequest
 
             'max_occupants' => $this->filled('max_occupants')
                 ? (int) $this->max_occupants
+                : 0,
+    
+            'sort_order' => $this->filled('sort_order')
+                ? (int) $this->sort_order
                 : 0,
 
             'allow_shared' => $this->has('allow_shared')

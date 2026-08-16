@@ -18,7 +18,8 @@ class TenantLeaseController extends Controller
     ) {}
 
     /**
-     * Lấy danh sách hợp đồng
+     * Lấy danh sách hợp đồng (GIỮ NGUYÊN KHÔNG TRUYỀN LEASE ID)
+     * Vì màn hình này cần hiển thị tất cả các hợp đồng của người dùng
      */
     public function index(Request $request): JsonResponse
     {
@@ -38,6 +39,7 @@ class TenantLeaseController extends Controller
      */
     public function show(Request $request, int $id): JsonResponse
     {
+        // Ở đây chúng ta vẫn dùng $id do Frontend truyền lên URL (VD: /leases/5)
         $lease = $this->tenantLeaseService->getTenantLease(
             leaseId: $id,
             userId: $request->user()->id
@@ -51,16 +53,13 @@ class TenantLeaseController extends Controller
      */
     public function previewHtml(Request $request, int $id, SettingService $settingService): JsonResponse
     {
-        // 1. Lấy hợp đồng ra để đảm bảo người này có quyền truy cập
         $lease = $this->tenantLeaseService->getTenantLease(
             leaseId: $id,
             userId: $request->user()->id
         );
 
-        // 2. Tìm ID của chủ trọ (thông qua property) để lấy đúng cấu hình mẫu hợp đồng của chủ trọ đó
         $landlordId = (int) $lease->room->property->user_id;
 
-        // 3. Biên dịch HTML và trả về
         $html = $settingService->compileLeaseHtml($lease->id, $landlordId);
 
         return response()->json(['html' => $html]);
