@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Exceptions\Domain\BusinessException;
+use App\Models\Lease;
 use App\Models\MeterReading;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -121,8 +122,11 @@ class UtilityService
      */
     public function analyze6Months(int $roomId, string $type): array
     {
-        // 1. Lấy 6 bản ghi chốt số gần nhất của phòng này
-        $readings = MeterReading::whereHas('lease', fn($q) => $q->where('room_id', $roomId))
+        // TỐI ƯU: Lấy danh sách ID các hợp đồng (bao gồm cũ và mới) của phòng này
+        $leaseIds = Lease::where('room_id', $roomId)->pluck('id');
+
+        // 1. Lấy 6 bản ghi chốt số gần nhất của phòng này bằng whereIn
+        $readings = MeterReading::whereIn('lease_id', $leaseIds)
             ->where('type', $type)
             ->orderByDesc('reading_date')
             ->orderByDesc('id')

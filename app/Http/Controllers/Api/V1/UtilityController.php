@@ -22,21 +22,39 @@ class UtilityController extends Controller
 
     /**
      * Lấy danh sách chỉ số tiện ích (điện, nước).
-     * Ownership check: qua hợp đồng -> phòng -> khu nhà.
+     * 
      */
     public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+
+        // TỐI ƯU 1: Lấy danh sách hợp đồng thuộc sở hữu của User (1 Query duy nhất)
+        $userLeaseIds = \App\Models\Lease::whereHas('room.property', function ($q) use ($user) {
+            $q->where('user_id', $user->id);
+        })->pluck('id');
+
         $readings = MeterReading::with([
             'lease.room.property',
             'lease.tenant:id,full_name'
         ])
-            ->whereHas('lease.room.property', fn($q) => $q->where('user_id', $request->user()->id))
+            // TỐI ƯU 2: Thay thế whereHas 3 tầng bằng whereIn
+            ->whereIn('lease_id', $userLeaseIds)
+
             ->when($request->lease_id, fn($q) => $q->where('lease_id', $request->lease_id))
-            ->when($request->property_id, fn($q) => $q->whereHas('lease.room', fn($r) => $r->where('property_id', $request->property_id)))
-            ->when($request->room_id, fn($q) => $q->whereHas('lease', fn($l) => $l->where('room_id', $request->room_id)))
+
+            ->when($request->property_id, function ($q, $propertyId) {
+                // TỐI ƯU 3: Lọc theo property_id mà không dùng whereHas lồng nhau trong MeterReading
+                $propertyLeaseIds = \App\Models\Lease::whereHas('room', fn($r) => $r->where('property_id', $propertyId))->pluck('id');
+                $q->whereIn('lease_id', $propertyLeaseIds);
+            })
+            ->when($request->room_id, function ($q, $roomId) {
+                // TỐI ƯU 4: Lọc theo room_id trực tiếp qua Lease
+                $roomLeaseIds = \App\Models\Lease::where('room_id', $roomId)->pluck('id');
+                $q->whereIn('lease_id', $roomLeaseIds);
+            })
+
             ->when($request->type, fn($q) => $q->where('type', $request->type))
             ->when($request->month, function ($q) use ($request) {
-                // Filter theo tháng (Định dạng YYYY-MM)
                 $q->whereMonth('reading_date', substr((string)$request->month, 5, 2))
                     ->whereYear('reading_date', substr((string)$request->month, 0, 4));
             })
