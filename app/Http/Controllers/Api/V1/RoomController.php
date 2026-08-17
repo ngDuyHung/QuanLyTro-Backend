@@ -40,18 +40,12 @@ class RoomController extends Controller
         $rooms = Room::with([
             'property',
             'images' => fn($query) => $query->orderBy('sort_order'),
-
             'activeLease.tenant:id,full_name,phone,email,id_card_number',
             'activeLease.members' => fn($q) => $q->whereNull('move_out_date')->with('tenant:id,full_name,phone,email,id_card_number'),
-
-            'reservations' => fn($query) => $query
-                ->where('status', 'pending'),
-            // Lấy các hóa đơn đang nợ CỦA HỢP ĐỒNG HIỆN TẠI
+            'reservations' => fn($query) => $query->where('status', 'pending'),
             'invoices' => fn($query) => $query->whereIn('status', ['draft', 'issued', 'partially_paid', 'overdue'])
                 ->whereHas('lease', fn($q) => $q->where('status', 'active')),
-            // Lấy hóa đơn mới nhất CỦA HỢP ĐỒNG HIỆN TẠI
-            'latestInvoice' => fn($query) => $query
-                ->whereHas('lease', fn($q) => $q->where('status', 'active'))
+            'latestInvoice' => fn($query) => $query->whereHas('lease', fn($q) => $q->where('status', 'active'))
         ])
             ->where('property_id', $property->id)
             ->when(
@@ -62,10 +56,24 @@ class RoomController extends Controller
                 $request->status,
                 fn($q) => $q->where('status', $request->status)
             )
-            // Sắp xếp theo sort_order tăng dần, nếu bằng nhau thì lấy id mới nhất
-            ->orderBy('sort_order', 'asc')
-            ->orderBy('id', 'desc')
+            ->when($request->filled('sort'), function ($query) use ($request) {
+                match ($request->sort) {
+                    'sort_order_asc' => $query->orderBy('sort_order', 'asc'),
+                    'sort_order_desc' => $query->orderBy('sort_order', 'desc'),
+                    'price_asc' => $query->orderBy('current_price', 'asc'),
+                    'price_desc' => $query->orderBy('current_price', 'desc'),
+                    'name_asc' => $query->orderBy('name', 'asc'),
+                    'name_desc' => $query->orderBy('name', 'desc'),
+                    'created_at_asc' => $query->orderBy('created_at', 'asc'),
+                    default => $query->orderBy('created_at', 'desc'),
+                };
+            }, function ($query) {
+                // FALLBACK AN TOÀN: Mặc định giữ nguyên logic cũ nếu Frontend không gửi tham số sort
+                $query->orderBy('sort_order', 'asc')->orderBy('id', 'desc');
+            })
+            // ---> KẾT THÚC ĐOẠN CODE THÊM MỚI <---
             ->paginate($request->integer('per_page', 15));
+
         return RoomResource::collection($rooms)->response();
     }
 
@@ -338,7 +346,7 @@ class RoomController extends Controller
         if ($room->reservations()->exists()) {
             throw new BusinessException('Không thể xóa phòng đang có lịch sử cọc giữ chỗ.');
         }
-        
+
         $pathsToDeleteAfterCommit = [];
 
         try {
