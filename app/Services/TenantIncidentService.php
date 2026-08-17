@@ -22,11 +22,15 @@ class TenantIncidentService
      */
     private function getActiveLease(int $userId, ?int $leaseId = null): Lease
     {
+        // TỐI ƯU: Truy xuất ID trực tiếp thay vì dùng whereHas lồng nhau
+        $tenantIds = \App\Models\Tenant::where('user_id', $userId)->pluck('id')->toArray();
+        $memberLeaseIds = \App\Models\LeaseMember::whereIn('tenant_id', $tenantIds)->pluck('lease_id')->toArray();
+
         $query = Lease::with(['room:id,property_id'])
             ->where('status', 'active')
-            ->where(function (Builder $q) use ($userId) {
-                $q->whereHas('tenant', fn($t) => $t->where('user_id', $userId))
-                  ->orWhereHas('members.tenant', fn($t) => $t->where('user_id', $userId));
+            ->where(function ($q) use ($tenantIds, $memberLeaseIds) {
+                $q->whereIn('tenant_id', $tenantIds)
+                    ->orWhereIn('id', $memberLeaseIds);
             });
 
         if ($leaseId) {

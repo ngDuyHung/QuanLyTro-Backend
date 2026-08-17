@@ -20,12 +20,16 @@ class TenantProfileController extends Controller
         $userId = $request->user()->id;
         $leaseIdHeader = $request->header('X-Lease-Id');
 
+        // TỐI ƯU: Truy xuất ID trực tiếp thay vì dùng whereHas lồng nhau
+        $tenantIds = \App\Models\Tenant::where('user_id', $userId)->pluck('id')->toArray();
+        $memberLeaseIds = \App\Models\LeaseMember::whereIn('tenant_id', $tenantIds)->pluck('lease_id')->toArray();
+
         // 1. Tìm Hợp đồng để suy ra Chủ trọ (owner_id)
         $query = \App\Models\Lease::with('room.property')
             ->where('status', 'active')
-            ->where(function ($q) use ($userId) {
-                $q->whereHas('tenant', fn($t) => $t->where('user_id', $userId))
-                  ->orWhereHas('members.tenant', fn($t) => $t->where('user_id', $userId));
+            ->where(function ($q) use ($tenantIds, $memberLeaseIds) {
+                $q->whereIn('tenant_id', $tenantIds)
+                    ->orWhereIn('id', $memberLeaseIds);
             });
 
         if ($leaseIdHeader) {

@@ -17,17 +17,18 @@ class TenantLeaseService
      */
     public function getTenantLeases(int $userId, array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
+        $tenantIds = \App\Models\Tenant::where('user_id', $userId)->pluck('id')->toArray();
+        $memberLeaseIds = \App\Models\LeaseMember::whereIn('tenant_id', $tenantIds)->pluck('lease_id')->toArray();
+
         $query = Lease::with([
             'room:id,name,property_id',
             'room.property:id,name,address',
             'tenant:id,full_name,phone',
             'serviceItems'
         ])
-            ->where(function (Builder $query) use ($userId) {
-                // Lấy hợp đồng nếu user là người đứng tên
-                $query->whereHas('tenant', fn($q) => $q->where('user_id', $userId))
-                    // Hoặc user là thành viên ở ghép
-                    ->orWhereHas('members.tenant', fn($q) => $q->where('user_id', $userId));
+            ->where(function ($q) use ($tenantIds, $memberLeaseIds) {
+                $q->whereIn('tenant_id', $tenantIds)
+                    ->orWhereIn('id', $memberLeaseIds);
             });
 
         if (!empty($filters['status'])) {
@@ -42,6 +43,9 @@ class TenantLeaseService
      */
     public function getTenantLease(int $leaseId, int $userId): Lease
     {
+        $tenantIds = \App\Models\Tenant::where('user_id', $userId)->pluck('id')->toArray();
+        $memberLeaseIds = \App\Models\LeaseMember::whereIn('tenant_id', $tenantIds)->pluck('lease_id')->toArray();
+
         return Lease::with([
             'room.property:id,name,address,user_id',
             'tenant',
@@ -49,9 +53,9 @@ class TenantLeaseService
             'serviceItems',
             'invoices:id,lease_id,invoice_code,status,total_amount,remaining_amount',
         ])
-            ->where(function (Builder $query) use ($userId) {
-                $query->whereHas('tenant', fn($q) => $q->where('user_id', $userId))
-                    ->orWhereHas('members.tenant', fn($q) => $q->where('user_id', $userId));
+            ->where(function ($q) use ($tenantIds, $memberLeaseIds) {
+                $q->whereIn('tenant_id', $tenantIds)
+                    ->orWhereIn('id', $memberLeaseIds);
             })
             ->findOrFail($leaseId);
     }
@@ -61,10 +65,13 @@ class TenantLeaseService
      */
     public function registerCheckoutNotice(int $leaseId, string $moveOutDate, int $userId): Lease
     {
-        // 1. Lấy hợp đồng ra kèm quyền kiểm tra (phải là người thuê hoặc ở ghép)
-        $lease = Lease::where(function (Builder $query) use ($userId) {
-            $query->whereHas('tenant', fn($q) => $q->where('user_id', $userId))
-                ->orWhereHas('members.tenant', fn($q) => $q->where('user_id', $userId));
+        $tenantIds = \App\Models\Tenant::where('user_id', $userId)->pluck('id')->toArray();
+        $memberLeaseIds = \App\Models\LeaseMember::whereIn('tenant_id', $tenantIds)->pluck('lease_id')->toArray();
+
+        // 1. Lấy hợp đồng ra kèm quyền kiểm tra
+        $lease = Lease::where(function ($q) use ($tenantIds, $memberLeaseIds) {
+            $q->whereIn('tenant_id', $tenantIds)
+                ->orWhereIn('id', $memberLeaseIds);
         })->findOrFail($leaseId);
 
         // 2. Validate ràng buộc kinh doanh

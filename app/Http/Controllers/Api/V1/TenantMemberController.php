@@ -31,11 +31,15 @@ class TenantMemberController extends Controller
      */
     private function getActiveLease(int $userId, ?int $leaseId = null): Lease
     {
+        // TỐI ƯU: Truy xuất ID trực tiếp thay vì dùng whereHas lồng nhau
+        $tenantIds = \App\Models\Tenant::where('user_id', $userId)->pluck('id')->toArray();
+        $memberLeaseIds = \App\Models\LeaseMember::whereIn('tenant_id', $tenantIds)->pluck('lease_id')->toArray();
+
         $query = Lease::with(['room.property'])
             ->where('status', 'active')
-            ->where(function ($q) use ($userId) {
-                $q->whereHas('tenant', fn($t) => $t->where('user_id', $userId))
-                    ->orWhereHas('members.tenant', fn($t) => $t->where('user_id', $userId));
+            ->where(function ($q) use ($tenantIds, $memberLeaseIds) {
+                $q->whereIn('tenant_id', $tenantIds)
+                    ->orWhereIn('id', $memberLeaseIds);
             });
 
         if ($leaseId) {
@@ -50,6 +54,7 @@ class TenantMemberController extends Controller
 
         return $lease;
     }
+
     /**
      * Lấy danh sách thành viên đang ở ghép trong phòng
      */
@@ -173,7 +178,7 @@ class TenantMemberController extends Controller
     {
         $leaseIdHeader = $request->header('X-Lease-Id');
         $lease = $this->getActiveLease($request->user()->id, $leaseIdHeader ? (int)$leaseIdHeader : null);
-        
+
         $member = LeaseMember::where('lease_id', $lease->id)
             ->where('tenant_id', $tenantId)
             ->whereNull('move_out_date')

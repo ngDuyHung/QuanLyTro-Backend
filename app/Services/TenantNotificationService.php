@@ -26,11 +26,15 @@ class TenantNotificationService
             return Notification::query()->where('id', 0);
         }
 
-        // 1. Tìm Hợp đồng đang active (theo ID truyền vào hoặc lấy mặc định cái đầu tiên)
+        // TỐI ƯU: Truy xuất ID trực tiếp thay vì dùng whereHas lồng nhau
+        $tenantIds = \App\Models\Tenant::where('user_id', $userId)->pluck('id')->toArray();
+        $memberLeaseIds = \App\Models\LeaseMember::whereIn('tenant_id', $tenantIds)->pluck('lease_id')->toArray();
+
+        // 1. Tìm Hợp đồng đang active
         $query = Lease::where('status', 'active')
-            ->where(function (Builder $q) use ($userId) {
-                $q->whereHas('tenant', fn($t) => $t->where('user_id', $userId))
-                  ->orWhereHas('members.tenant', fn($t) => $t->where('user_id', $userId));
+            ->where(function ($q) use ($tenantIds, $memberLeaseIds) {
+                $q->whereIn('tenant_id', $tenantIds)
+                    ->orWhereIn('id', $memberLeaseIds);
             });
 
         if ($leaseId) {
@@ -58,16 +62,16 @@ class TenantNotificationService
                     $q->where('target_type', 'all')
                         ->where('user_id', $landlordId);
                 })
-                // Hoặc gửi riêng cho khu nhà đang ở
-                ->orWhere(function ($q) use ($propertyId) {
-                    $q->where('target_type', 'property')
-                        ->where('target_id', $propertyId);
-                })
-                // Hoặc gửi riêng cho phòng đang ở
-                ->orWhere(function ($q) use ($roomId) {
-                    $q->where('target_type', 'room')
-                        ->where('target_id', $roomId);
-                });
+                    // Hoặc gửi riêng cho khu nhà đang ở
+                    ->orWhere(function ($q) use ($propertyId) {
+                        $q->where('target_type', 'property')
+                            ->where('target_id', $propertyId);
+                    })
+                    // Hoặc gửi riêng cho phòng đang ở
+                    ->orWhere(function ($q) use ($roomId) {
+                        $q->where('target_type', 'room')
+                            ->where('target_id', $roomId);
+                    });
             });
     }
 
