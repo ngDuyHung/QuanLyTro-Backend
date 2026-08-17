@@ -13,6 +13,7 @@ use App\Models\ServicePrice;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+
 class ServicePriceController extends Controller
 {
     /**
@@ -20,14 +21,13 @@ class ServicePriceController extends Controller
      */
     public function indexGlobal(Request $request): JsonResponse
     {
-        $servicePrices = ServicePrice::with('priceHistories')
+        $servicePrices = ServicePrice::query() // TỐI ƯU: Bỏ with('priceHistories')
             ->whereNull('property_id')
             ->latest()
             ->paginate($request->integer('per_page', 15));
 
         return ServicePriceResource::collection($servicePrices)->response();
     }
-
     /**
      * Lấy giá dịch vụ áp dụng cho khu nhà: ưu tiên giá riêng, fallback sang mặc định.
      */
@@ -37,7 +37,7 @@ class ServicePriceController extends Controller
         Property::where('user_id', $request->user()->id)->findOrFail($propertyId);
 
         // Lấy giá riêng của khu nhà (keyed by service_type)
-        $propertyPrices = ServicePrice::with('priceHistories')
+        $propertyPrices = ServicePrice::query() // TỐI ƯU: Bỏ with('priceHistories')
             ->where('property_id', $propertyId)
             ->get()
             ->keyBy(fn($p) => $p->service_type->value);
@@ -45,7 +45,7 @@ class ServicePriceController extends Controller
         // Lấy giá mặc định cho các loại DV chưa có giá riêng
         $assignedTypes = $propertyPrices->keys()->all();
 
-        $globalPrices = ServicePrice::with('priceHistories')
+        $globalPrices = ServicePrice::query() // TỐI ƯU: Bỏ with('priceHistories')
             ->whereNull('property_id')
             ->when(!empty($assignedTypes), fn($q) => $q->whereNotIn('service_type', $assignedTypes))
             ->get()

@@ -31,14 +31,16 @@ class SePayTransactionController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        // TỐI ƯU 1: Lấy trước ID các tài khoản ngân hàng của chủ trọ
+        $bankAccountIds = \App\Models\BankAccount::where('user_id', $request->user()->id)->pluck('id');
+
         $transactions = SePayTransaction::query()
             ->with([
                 'bankAccount:id,user_id,account_name,account_number,bank_name,bank_code',
-                'financialTransactions.allocations.invoice',
+                // TỐI ƯU 2: ĐÃ XÓA 'financialTransactions.allocations.invoice'
             ])
-            ->whereHas('bankAccount', function ($query) use ($request): void {
-                $query->where('user_id', $request->user()->id);
-            })
+            // TỐI ƯU 3: Dùng whereIn thay cho whereHas
+            ->whereIn('bank_account_id', $bankAccountIds)
             ->when($request->query('match_status'), function ($query, $status): void {
                 $query->where('match_status', $status);
             })
@@ -190,11 +192,11 @@ class SePayTransactionController extends Controller
      */
     private function findOwnedSePayTransaction(int $id, int $userId): SePayTransaction
     {
+        $bankAccountIds = \App\Models\BankAccount::where('user_id', $userId)->pluck('id');
+
         return SePayTransaction::query()
             ->with('bankAccount')
-            ->whereHas('bankAccount', function ($query) use ($userId): void {
-                $query->where('user_id', $userId);
-            })
+            ->whereIn('bank_account_id', $bankAccountIds) // TỐI ƯU 4: Dùng whereIn
             ->findOrFail($id);
     }
 
