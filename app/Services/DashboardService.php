@@ -23,15 +23,18 @@ class DashboardService
      */
     public function getDashboardData(int $userId): array
     {
-        // Lấy trước danh sách ID khu nhà của chủ trọ để dùng chung cho các câu query tối ưu hơn
         $propertyIds = Property::where('user_id', $userId)->pluck('id')->toArray();
 
+        // Thêm dòng này để lấy sẵn mảng ID phòng
+        $roomIds = empty($propertyIds) ? [] : Room::whereIn('property_id', $propertyIds)->pluck('id')->toArray();
+
+        // Cập nhật tham số truyền vào các hàm
         return [
-            'overview' => $this->getOverviewStats($propertyIds),
+            'overview' => $this->getOverviewStats($propertyIds, $roomIds),
             'financial_chart' => $this->getFinancialChart($propertyIds),
-            'pending_tasks' => $this->getPendingTasks($userId, $propertyIds),
+            'pending_tasks' => $this->getPendingTasks($userId, $propertyIds, $roomIds),
             'collection_status' => $this->getCollectionStatus($propertyIds),
-            'expiring_leases' => $this->getExpiringLeasesList($propertyIds),
+            'expiring_leases' => $this->getExpiringLeasesList($roomIds),
         ];
     }
 
@@ -47,7 +50,7 @@ class DashboardService
         $endDate = now()->endOfMonth()->toDateString();
 
         // Lấy tổng total_amount và paid_amount group theo trạng thái của hóa đơn phát hành tháng này
-        $stats = Invoice::whereHas('lease.room', fn($q) => $q->whereIn('property_id', $propertyIds))
+        $stats = Invoice::whereIn('property_id', $propertyIds)
             ->where('status', '!=', 'draft') // Bỏ qua hóa đơn nháp
             ->whereBetween('issue_date', [$startDate, $endDate])
             ->selectRaw("status, SUM(total_amount) as sum_total, SUM(paid_amount) as sum_paid")
@@ -100,7 +103,7 @@ class DashboardService
     /**
      * 1. Thống kê tổng quan (Khu nhà, phòng, tỷ lệ lấp đầy)
      */
-    private function getOverviewStats(array $propertyIds): array
+    private function getOverviewStats(array $propertyIds, array $roomIds): array
     {
         if (empty($propertyIds)) {
             return [
@@ -129,7 +132,7 @@ class DashboardService
         $totalRooms = array_sum($roomsStat);
 
         $occupancyRate = $totalRooms > 0 ? round(($occupied / $totalRooms) * 100, 1) : 0;
-        $totalLeases = Lease::whereHas('room', fn($q) => $q->whereIn('property_id', $propertyIds))
+        $totalLeases = empty($roomIds) ? 0 : Lease::whereIn('room_id', $roomIds)
             ->where('status', 'active')
             ->count();
 
@@ -201,7 +204,7 @@ class DashboardService
     /**
      * 3. Nhắc việc và Cảnh báo
      */
-    private function getPendingTasks(int $userId, array $propertyIds): array
+    private function getPendingTasks(int $userId, array $propertyIds, array $roomIds): array
     {
         if (empty($propertyIds)) {
             return [
@@ -220,7 +223,7 @@ class DashboardService
         $threeDaysLater = now()->addDays(3)->toDateString();
 
         // 3.1: Hóa đơn chưa thu (Gom nhóm Quá hạn, Sắp đến hạn và Tổng bằng 1 câu Query duy nhất)
-        $invoiceStats = Invoice::whereHas('lease.room', fn($q) => $q->whereIn('property_id', $propertyIds))
+        $invoiceStats = Invoice::whereIn('property_id', $propertyIds)
             ->where('status', 'issued')
             ->where('remaining_amount', '>', 0)
             ->selectRaw("
@@ -239,7 +242,7 @@ class DashboardService
             ->count();
 
         // 3.3: Hợp đồng sắp hết hạn (trong 30 ngày tới)
-        $expiringLeasesCount = Lease::whereHas('room', fn($q) => $q->whereIn('property_id', $propertyIds))
+        $expiringLeasesCount = empty($roomIds) ? 0 : Lease::whereIn('room_id', $roomIds)
             ->where('status', 'active')
             ->whereBetween('end_date', [$now, now()->addDays(30)->toDateString()])
             ->count();
@@ -263,17 +266,16 @@ class DashboardService
     /**
      * Lấy chi tiết danh sách hợp đồng sắp hết hạn (trong vòng 30 ngày)
      */
-    private function getExpiringLeasesList(array $propertyIds): array
+    private function getExpiringLeasesList(array $roomIds): array
     {
-        if (empty($propertyIds)) {
+        if (empty($roomIds)) {
             return [];
         }
-
         $now = now()->startOfDay();
         $thirtyDaysLater = now()->addDays(30)->endOfDay();
 
         $leases = Lease::with(['room.property', 'tenant'])
-            ->whereHas('room', fn($q) => $q->whereIn('property_id', $propertyIds))
+            ->whereIn('room_id', $roomIds)
             ->where('status', 'active')
             ->whereNotNull('end_date')
             ->whereBetween('end_date', [$now, $thirtyDaysLater])
