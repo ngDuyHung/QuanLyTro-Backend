@@ -14,7 +14,8 @@ class RoomResource extends JsonResource
     {
         $paymentStatus = 'none';
 
-        if ($this->status === 'occupied') {
+        // Thêm ?->value để lấy giá trị chuỗi của Enum
+        if ($this->status?->value === 'occupied') {
             if ($this->unpaid_amount > 0) {
                 $paymentStatus = 'debt';
             } elseif ($this->has_any_invoice) {

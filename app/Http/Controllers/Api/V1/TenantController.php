@@ -29,8 +29,15 @@ class TenantController extends Controller
     public function index(Request $request): JsonResponse
     {
         $tenants = Tenant::with([
-            'leases.room.property',
-            'leaseMembers.lease.room.property',
+            // TỐI ƯU: Chỉ select đúng những cột cần thiết thay vì lấy nguyên toàn bộ bảng
+            'leases:id,tenant_id,room_id,start_date,end_date,status',
+            'leases.room:id,property_id,name',
+            'leases.room.property:id,name',
+
+            'leaseMembers:id,lease_id,tenant_id,move_in_date,move_out_date',
+            'leaseMembers.lease:id,room_id,status',
+            'leaseMembers.lease.room:id,property_id,name',
+            'leaseMembers.lease.room.property:id,name',
         ])
             ->where('owner_id', $request->user()->id)
             ->when($request->filled('search'), function ($query) use ($request): void {

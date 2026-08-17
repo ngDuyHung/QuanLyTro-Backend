@@ -23,14 +23,13 @@ class LeaseController extends Controller
     ) {}
 
     /**
-     * Lấy danh sách hợp đồng thuê (filter: room_id, tenant_id, status, property_id).
-     *
+     * Lấy danh sách hợp đồng thuê (filter: room_id, tenant_id, status, property_id, search).
      */
     public function index(Request $request): JsonResponse
     {
         $userId = $request->user()->id;
 
-        // 1. Lấy mảng ID Khu nhà của chủ trọ trước (Tối ưu để tránh whereHas nhiều tầng)
+        // 1. Lấy mảng ID Khu nhà của chủ trọ trước 
         $propertyIds = \App\Models\Property::where('user_id', $userId)->pluck('id')->toArray();
 
         // 2. Lấy mảng ID Phòng thuộc các Khu nhà trên
@@ -39,30 +38,100 @@ class LeaseController extends Controller
             ->when($request->property_id, fn($q) => $q->where('property_id', $request->property_id))
             ->pluck('id')->toArray();
 
-        // 3. Nếu không có phòng nào, trả về danh sách rỗng luôn
+        // 3. Nếu không có phòng nào, trả về danh sách rỗng kèm bộ đếm 0
         if (empty($roomIds)) {
-            return LeaseResource::collection(collect())->response();
+            return LeaseResource::collection(collect())
+                ->additional(['stats' => $this->getLeaseStats([])])
+                ->response();
         }
 
-        // 4. Truy vấn Lease với mảng roomIds (Loại bỏ hoàn toàn with('invoices'))
+        // 4. Truy vấn Lease với mảng roomIds
         $leases = Lease::with([
             'room:id,name,property_id',
             'room.property:id,name',
             'tenant:id,full_name,phone',
         ])
-            ->whereIn('room_id', $roomIds) // Thay thế cho whereHas('room.property')
+            ->whereIn('room_id', $roomIds)
+
+            // --- TÍNH NĂNG TÌM KIẾM BỔ SUNG ---
+            ->when($request->filled('search'), function ($query) use ($request) {
+                $search = trim((string) $request->search);
+
+                $query->where(function ($sub) use ($search) {
+                    // Lọc theo Mã hợp đồng (Bỏ chữ HĐ, chữ #, chỉ lấy số)
+                    $parsedId = preg_replace('/[^0-9]/', '', $search);
+                    if (!empty($parsedId)) {
+                        $sub->where('id', $parsedId);
+                    }
+
+                    // Lọc theo Tên phòng hoặc Tên/SĐT Khách thuê
+                    $sub->orWhereHas('tenant', fn($t) => $t->where('full_name', 'like', "%{$search}%")->orWhere('phone', 'like', "%{$search}%"))
+                        ->orWhereHas('room', fn($r) => $r->where('name', 'like', "%{$search}%"));
+                });
+            })
+            // ------------------------------------
+
             ->when($request->room_id,     fn($q) => $q->where('room_id', $request->room_id))
             ->when($request->tenant_id,   fn($q) => $q->where('tenant_id', $request->tenant_id))
             ->when($request->status,      fn($q) => $q->where('status', $request->status))
             ->latest()
             ->paginate($request->integer('per_page', 15));
 
-        return LeaseResource::collection($leases)->response();
+        // Trả về kèm theo bộ thống kê chính xác tuyệt đối
+        return LeaseResource::collection($leases)
+            ->additional(['stats' => $this->getLeaseStats($roomIds)])
+            ->response();
     }
 
     /**
-     * Xem chi tiết hợp đồng (kèm khách thuê, phòng, thành viên, hóa đơn).
-     * Ownership check: qua phòng -> khu nhà.
+     * Tính toán bộ thống kê hợp đồng (Chạy duy nhất 1 câu SQL nguyên thủy cực nhẹ)
+     */
+    private function getLeaseStats(array $roomIds): array
+    {
+        if (empty($roomIds)) {
+            return [
+                'total' => 0,
+                'active' => 0,
+                'active_rate' => 0,
+                'expiring' => 0,
+                'expiring_rate' => 0,
+                'ended' => 0,
+                'ended_rate' => 0,
+            ];
+        }
+
+        $now = now()->startOfDay();
+        $thirtyDaysLater = now()->addDays(30)->endOfDay();
+
+        $stats = Lease::whereIn('room_id', $roomIds)
+            ->selectRaw("
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count,
+                SUM(CASE WHEN status = 'ended' THEN 1 ELSE 0 END) as ended_count,
+                SUM(CASE WHEN status = 'active' AND end_date IS NOT NULL AND end_date BETWEEN ? AND ? THEN 1 ELSE 0 END) as expiring_count
+            ", [$now, $thirtyDaysLater])
+            ->first();
+
+        $total = (int) ($stats->total ?? 0);
+        $active = (int) ($stats->active_count ?? 0);
+        $ended = (int) ($stats->ended_count ?? 0);
+        $expiring = (int) ($stats->expiring_count ?? 0);
+
+        $percent = fn($val) => $total > 0 ? (int) round(($val / $total) * 100) : 0;
+
+        return [
+            'total' => $total,
+            'active' => $active,
+            'active_rate' => $percent($active),
+            'expiring' => $expiring,
+            'expiring_rate' => $percent($expiring),
+            'ended' => $ended,
+            'ended_rate' => $percent($ended),
+        ];
+    }
+
+    /**
+     * Xem chi tiết hợp đồng (kèm khách thuê, phòng, thành viên).
      */
     public function show(Request $request, int $id): JsonResponse
     {
@@ -71,7 +140,6 @@ class LeaseController extends Controller
             'tenant',
             'members',
             'serviceItems',
-            'invoices:id,lease_id,invoice_code,status,total_amount',
         ])
             ->whereHas('room.property', fn($q) => $q->where('user_id', $request->user()->id))
             ->findOrFail($id);
