@@ -7,6 +7,7 @@ use App\Exceptions\Domain\BusinessException;
 use App\Http\Requests\Invoice\StoreInvoiceRequest;
 use App\Http\Resources\Invoice\InvoiceResource;
 use App\Models\Invoice;
+use App\Models\Property;
 use App\Services\InvoiceService;
 use App\Services\SettingService;
 use Illuminate\Http\Request;
@@ -33,20 +34,26 @@ class InvoiceController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        // TỐI ƯU 1: Lấy trước mảng ID khu trọ của user đang đăng nhập
+        $propertyIds = \App\Models\Property::where('user_id', $request->user()->id)->pluck('id');
+
         $invoices = Invoice::query()
+            // TỐI ƯU 2: Sử dụng whereIn thay cho whereHas 3 tầng
+            ->whereIn('property_id', $propertyIds)
             ->with([
                 'lease:id,room_id,tenant_id,start_date,end_date,billing_day,status',
                 'lease.room:id,property_id,name',
-                'lease.room.property:id,user_id,name,address',
+                'lease.tenant:id,full_name,phone', // Thêm tenant để FE hiển thị tên
                 'room:id,property_id,name',
                 'property:id,user_id,name',
-                'items',
-                'meterReadings',
-                'allocations.financialTransaction',
+                // ĐÃ GỠ BỎ: 'items', 'meterReadings', 'allocations.financialTransaction'
             ])
-            ->whereHas('lease.room.property', function ($query) use ($request): void {
-                $query->where('user_id', $request->user()->id);
-            })
+            // TỐI ƯU 3: Đẩy việc tính toán "có giao dịch chờ duyệt không" xuống tầng Database
+            ->withExists(['allocations as has_pending_transaction' => function ($query) {
+                $query->whereHas('financialTransaction', function ($q) {
+                    $q->where('status', 'pending');
+                });
+            }])
             ->when($request->query('property_id'), function ($query, $propertyId): void {
                 $query->where('property_id', $propertyId);
             })
@@ -285,10 +292,11 @@ class InvoiceController extends Controller
 
     public function countActive(Request $request): JsonResponse
     {
+        // TỐI ƯU: Lấy danh sách ID khu trọ và dùng whereIn
+        $propertyIds = Property::where('user_id', $request->user()->id)->pluck('id');
+
         $count = Invoice::query()
-            ->whereHas('lease.room.property', function ($query) use ($request): void {
-                $query->where('user_id', $request->user()->id);
-            })
+            ->whereIn('property_id', $propertyIds)
             ->whereIn('status', ['draft', 'issued'])
             ->count();
 

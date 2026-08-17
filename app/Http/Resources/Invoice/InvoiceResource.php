@@ -75,6 +75,9 @@ class InvoiceResource extends JsonResource
             'cancelled_at' => $this->cancelled_at?->toDateTimeString(),
             'cancel_reason' => $this->cancel_reason,
 
+            // TỐI ƯU: Thêm cờ boolean kiểm tra giao dịch chờ duyệt (do controller withExists truyền sang)
+            'has_pending_transaction' => $this->has_pending_transaction,
+
             'note' => $this->note,
 
             /*

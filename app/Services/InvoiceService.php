@@ -12,6 +12,7 @@ use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Lease;
 use App\Models\MeterReading;
+use App\Models\Property;
 use App\Models\ServicePrice;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -26,11 +27,12 @@ class InvoiceService
      */
     public function findOwnedInvoice(int $invoiceId, int $userId): Invoice
     {
+        // TỐI ƯU: Lấy danh sách property_id của user và dùng whereIn thay cho whereHas 3 tầng
+        $propertyIds = Property::where('user_id', $userId)->pluck('id');
+
         return Invoice::query()
             ->with(['lease.room.property', 'items'])
-            ->whereHas('lease.room.property', function ($query) use ($userId): void {
-                $query->where('user_id', $userId);
-            })
+            ->whereIn('property_id', $propertyIds)
             ->findOrFail($invoiceId);
     }
 
@@ -415,8 +417,17 @@ class InvoiceService
             ->get()
             ->keyBy('type');
 
+        // TỐI ƯU N+1: Lấy trước toàn bộ chỉ số điện nước gần nhất của hợp đồng này bằng 1 câu Query
+        // unique('type') đảm bảo chỉ lấy dòng mới nhất (do đã orderByDesc)
+        $lastReadings = MeterReading::where('lease_id', $leaseId)
+            ->whereIn('type', ['electricity', 'water'])
+            ->orderByDesc('id')
+            ->get()
+            ->unique('type')
+            ->keyBy('type');
+
         // Hàm helper nhỏ để xử lý Điện/Nước nội bộ trong hàm này
-        $processUtility = function (string $type) use ($lease, $applicablePrices, $unbilledReadings, $leaseId) {
+        $processUtility = function (string $type) use ($lease, $applicablePrices, $unbilledReadings, $lastReadings) { // <-- Truyền thêm $lastReadings vào đây
             // Lấy cấu hình dịch vụ trong hợp đồng
             $serviceItem = $lease->serviceItems->firstWhere('service_type.value', $type)
                 ?? $lease->serviceItems->firstWhere('service_type', $type);
@@ -444,7 +455,8 @@ class InvoiceService
                 // Tạo URL ảnh đầy đủ (Tùy cấu hình storage của bạn)
                 $imageUrl = $reading->meter_image ? asset('storage/' . $reading->meter_image) : null;
             } else {
-                $lastReading = MeterReading::where('lease_id', $leaseId)->where('type', $type)->orderByDesc('id')->first();
+                // TỐI ƯU: Lấy từ RAM ($lastReadings) thay vì query DB
+                $lastReading = $lastReadings->get($type);
                 $prev = $lastReading ? $lastReading->current_reading : 0;
                 $current = "";
                 $imageUrl = null;
