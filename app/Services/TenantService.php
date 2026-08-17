@@ -114,8 +114,11 @@ class TenantService
         $activeRoommate = LeaseMember::where('tenant_id', $tenant->id)
             ->whereNull('move_out_date')
             ->whereHas('lease.room.property', fn($query) => $query->where('user_id', $tenant->owner_id))
-            ->with('lease.room')
-            ->first();
+            ->with([
+                'lease:id,room_id',
+                'lease.room:id,name'
+            ])
+            ->first(['id', 'lease_id', 'tenant_id']);
 
         if ($activeRoommate) {
             $roomName = $activeRoommate->lease?->room?->name ?? 'một phòng khác';

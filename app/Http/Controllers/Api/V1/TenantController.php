@@ -28,59 +28,83 @@ class TenantController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $tenants = Tenant::with([
-            // TỐI ƯU: Chỉ select đúng những cột cần thiết thay vì lấy nguyên toàn bộ bảng
+        $query = Tenant::with([
+            // Đã tối ưu chọn cột - Giữ nguyên
             'leases:id,tenant_id,room_id,start_date,end_date,status',
             'leases.room:id,property_id,name',
             'leases.room.property:id,name',
-
             'leaseMembers:id,lease_id,tenant_id,move_in_date,move_out_date',
             'leaseMembers.lease:id,room_id,status',
             'leaseMembers.lease.room:id,property_id,name',
             'leaseMembers.lease.room.property:id,name',
         ])
-            ->where('owner_id', $request->user()->id)
-            ->when($request->filled('search'), function ($query) use ($request): void {
-                $keyword = '%' . trim((string) $request->search) . '%';
-                $query->where(function ($sub) use ($keyword): void {
-                    $sub->where('full_name', 'like', $keyword)
-                        ->orWhere('phone', 'like', $keyword)
-                        ->orWhere('id_card_number', 'like', $keyword);
+            ->where('owner_id', $request->user()->id);
+
+        // 1. Filter theo từ khóa
+        if ($request->filled('search')) {
+            $keyword = '%' . trim((string) $request->search) . '%';
+            $query->where(function ($sub) use ($keyword): void {
+                $sub->where('full_name', 'like', $keyword)
+                    ->orWhere('phone', 'like', $keyword)
+                    ->orWhere('id_card_number', 'like', $keyword);
+            });
+        }
+
+        // 2. TỐI ƯU Filter theo Khu nhà (Property) bằng Subquery Union
+        if ($request->filled('property_id')) {
+            $propertyId = $request->integer('property_id');
+            $query->whereIn('id', function ($q) use ($propertyId) {
+                $q->select('tenant_id')->from('leases')
+                    ->join('rooms', 'leases.room_id', '=', 'rooms.id')
+                    ->where('rooms.property_id', $propertyId)
+                    ->union(
+                        DB::table('lease_members')->select('tenant_id')
+                            ->join('leases', 'lease_members.lease_id', '=', 'leases.id')
+                            ->join('rooms', 'leases.room_id', '=', 'rooms.id')
+                            ->where('rooms.property_id', $propertyId)
+                    );
+            });
+        }
+
+        // 3. TỐI ƯU Filter theo Phòng (Room) bằng Subquery Union
+        if ($request->filled('room_id')) {
+            $roomId = $request->integer('room_id');
+            $query->whereIn('id', function ($q) use ($roomId) {
+                $q->select('tenant_id')->from('leases')->where('room_id', $roomId)
+                    ->union(
+                        DB::table('lease_members')->select('tenant_id')
+                            ->join('leases', 'lease_members.lease_id', '=', 'leases.id')
+                            ->where('leases.room_id', $roomId)
+                    );
+            });
+        }
+
+        // 4. TỐI ƯU Filter Trạng thái (Status) - KHÔNG DÙNG whereHas / whereDoesntHave
+        if ($request->filled('status')) {
+            if ($request->status === 'active') {
+                $query->whereIn('id', function ($q) {
+                    $q->select('tenant_id')->from('leases')->where('status', 'active')
+                        ->union(DB::table('lease_members')->select('tenant_id')->whereNull('move_out_date'));
                 });
-            })
-            ->when($request->filled('property_id'), function ($query) use ($request): void {
-                $propertyId = $request->integer('property_id');
-                $query->where(function ($q) use ($propertyId) {
-                    $q->whereHas('leases.room', fn($sub) => $sub->where('property_id', $propertyId))
-                        ->orWhereHas('leaseMembers.lease.room', fn($sub) => $sub->where('property_id', $propertyId));
+            } elseif ($request->status === 'pending') {
+                // Chưa từng thuê (không có trong leases, cũng không có trong lease_members)
+                $query->whereNotIn('id', function ($q) {
+                    $q->select('tenant_id')->from('leases')
+                        ->union(DB::table('lease_members')->select('tenant_id'));
                 });
-            })
-            ->when($request->filled('room_id'), function ($query) use ($request): void {
-                $roomId = $request->integer('room_id');
-                $query->where(function ($q) use ($roomId) {
-                    $q->whereHas('leases', fn($sub) => $sub->where('room_id', $roomId))
-                        ->orWhereHas('leaseMembers.lease', fn($sub) => $sub->where('room_id', $roomId));
+            } elseif ($request->status === 'left') {
+                // Đã từng thuê nhưng hiện tại không thuê (Có trong lịch sử, nhưng không nằm trong nhóm active)
+                $query->whereIn('id', function ($q) {
+                    $q->select('tenant_id')->from('leases')
+                        ->union(DB::table('lease_members')->select('tenant_id'));
+                })->whereNotIn('id', function ($q) {
+                    $q->select('tenant_id')->from('leases')->where('status', 'active')
+                        ->union(DB::table('lease_members')->select('tenant_id')->whereNull('move_out_date'));
                 });
-            })
-            ->when($request->filled('status'), function ($query) use ($request): void {
-                if ($request->status === 'active') {
-                    $query->where(function ($q) {
-                        $q->whereHas('leases', fn($sub) => $sub->where('status', 'active'))
-                            ->orWhereHas('leaseMembers', fn($sub) => $sub->whereNull('move_out_date'));
-                    });
-                } elseif ($request->status === 'left') {
-                    $query->where(function ($q) {
-                        $q->where(function ($sub) {
-                            $sub->whereHas('leases')->orWhereHas('leaseMembers');
-                        })->whereDoesntHave('leases', fn($sub) => $sub->where('status', 'active'))
-                            ->whereDoesntHave('leaseMembers', fn($sub) => $sub->whereNull('move_out_date'));
-                    });
-                } elseif ($request->status === 'pending') {
-                    $query->whereDoesntHave('leases')->whereDoesntHave('leaseMembers');
-                }
-            })
-            ->latest()
-            ->paginate($request->integer('per_page', 15));
+            }
+        }
+
+        $tenants = $query->latest()->paginate($request->integer('per_page', 15));
 
         return TenantResource::collection($tenants)->response();
     }
@@ -88,7 +112,15 @@ class TenantController extends Controller
     public function show(Request $request, int $id): JsonResponse
     {
         $tenant = Tenant::where('owner_id', $request->user()->id)
-            ->with(['leases.room.property', 'leaseMembers.lease.room.property'])
+            ->with([
+                'leases:id,tenant_id,room_id,start_date,end_date,status',
+                'leases.room:id,property_id,name',
+                'leases.room.property:id,name',
+                'leaseMembers:id,lease_id,tenant_id,move_in_date,move_out_date',
+                'leaseMembers.lease:id,room_id,status',
+                'leaseMembers.lease.room:id,property_id,name',
+                'leaseMembers.lease.room.property:id,name',
+            ])
             ->findOrFail($id);
 
         return (new TenantResource($tenant))->response();
@@ -180,8 +212,13 @@ class TenantController extends Controller
                 );
 
                 return $tenant->refresh()->load([
-                    'leases.room.property',
-                    'leaseMembers.lease.room.property',
+                    'leases:id,tenant_id,room_id,start_date,end_date,status',
+                    'leases.room:id,property_id,name',
+                    'leases.room.property:id,name',
+                    'leaseMembers:id,lease_id,tenant_id,move_in_date,move_out_date',
+                    'leaseMembers.lease:id,room_id,status',
+                    'leaseMembers.lease.room:id,property_id,name',
+                    'leaseMembers.lease.room.property:id,name',
                 ]);
             });
 
