@@ -24,21 +24,36 @@ class LeaseController extends Controller
 
     /**
      * Lấy danh sách hợp đồng thuê (filter: room_id, tenant_id, status, property_id).
-     * Ownership check: qua phòng -> khu nhà.
+     *
      */
     public function index(Request $request): JsonResponse
     {
+        $userId = $request->user()->id;
+
+        // 1. Lấy mảng ID Khu nhà của chủ trọ trước (Tối ưu để tránh whereHas nhiều tầng)
+        $propertyIds = \App\Models\Property::where('user_id', $userId)->pluck('id')->toArray();
+
+        // 2. Lấy mảng ID Phòng thuộc các Khu nhà trên
+        $roomIds = empty($propertyIds) ? [] : \App\Models\Room::whereIn('property_id', $propertyIds)
+            // Áp dụng filter property_id nếu có
+            ->when($request->property_id, fn($q) => $q->where('property_id', $request->property_id))
+            ->pluck('id')->toArray();
+
+        // 3. Nếu không có phòng nào, trả về danh sách rỗng luôn
+        if (empty($roomIds)) {
+            return LeaseResource::collection(collect())->response();
+        }
+
+        // 4. Truy vấn Lease với mảng roomIds (Loại bỏ hoàn toàn with('invoices'))
         $leases = Lease::with([
             'room:id,name,property_id',
             'room.property:id,name',
             'tenant:id,full_name,phone',
-            'invoices:id,lease_id,invoice_code,invoice_type,status,period_to,total_amount,remaining_amount'
         ])
-            ->whereHas('room.property', fn($q) => $q->where('user_id', $request->user()->id))
+            ->whereIn('room_id', $roomIds) // Thay thế cho whereHas('room.property')
             ->when($request->room_id,     fn($q) => $q->where('room_id', $request->room_id))
             ->when($request->tenant_id,   fn($q) => $q->where('tenant_id', $request->tenant_id))
             ->when($request->status,      fn($q) => $q->where('status', $request->status))
-            ->when($request->property_id, fn($q) => $q->whereHas('room', fn($r) => $r->where('property_id', $request->property_id)))
             ->latest()
             ->paginate($request->integer('per_page', 15));
 
