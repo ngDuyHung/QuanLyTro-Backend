@@ -323,7 +323,7 @@ class FinancialTransactionService
                 'room_id' => $data['room_id'] ?? null,
                 'lease_id' => $data['lease_id'] ?? null,
                 'tenant_id' => $data['tenant_id'] ?? null,
-                'tenant_name_snapshot' => $data['tenant_id']
+                'tenant_name_snapshot' => ($data['tenant_id'] ?? null) 
                     ? Tenant::find($data['tenant_id'])?->full_name
                     : null,
                 'bank_account_id' => $data['bank_account_id'] ?? null,
