@@ -43,10 +43,20 @@ class RoomController extends Controller
             'activeLease.tenant:id,full_name,phone,email,id_card_number',
             'activeLease.members' => fn($q) => $q->whereNull('move_out_date')->with('tenant:id,full_name,phone,email,id_card_number'),
             'reservations' => fn($query) => $query->where('status', 'pending'),
-            'invoices' => fn($query) => $query->whereIn('status', ['draft', 'issued', 'partially_paid', 'overdue'])
-                ->whereHas('lease', fn($q) => $q->where('status', 'active')),
-            'latestInvoice' => fn($query) => $query->whereHas('lease', fn($q) => $q->where('status', 'active'))
         ])
+            // Tính tổng tiền nợ của hợp đồng active
+            ->withSum([
+                'invoices as unpaid_amount' => fn($query) => $query
+                    ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+                    ->whereHas('lease', fn($q) => $q->where('status', 'active'))
+            ], 'remaining_amount')
+
+            // Kiểm tra xem phòng có tồn tại hóa đơn nào của hợp đồng active không (để xác định trạng thái paid/unbilled)
+            ->withExists([
+                'invoices as has_any_invoice' => fn($query) => $query
+                    ->where('status', '!=', 'draft') // Bỏ qua hóa đơn nháp
+                    ->whereHas('lease', fn($q) => $q->where('status', 'active'))
+            ])
             ->where('property_id', $property->id)
             ->when(
                 $request->search,
@@ -83,18 +93,21 @@ class RoomController extends Controller
         $rooms = Room::with([
             'property',
             'images' => fn($query) => $query->orderBy('sort_order'),
-
             'activeLease.tenant:id,full_name,phone,email,id_card_number',
             'activeLease.members' => fn($q) => $q->whereNull('move_out_date')->with('tenant:id,full_name,phone,email,id_card_number'),
             'reservations' => fn($query) => $query->where('status', 'pending'),
-            // Lấy các hóa đơn đang nợ CỦA HỢP ĐỒNG HIỆN TẠI
-            'invoices' => fn($query) => $query->whereIn('status', ['draft', 'issued', 'partially_paid', 'overdue'])
-                ->whereHas('lease', fn($q) => $q->where('status', 'active')),
-
-            // Lấy hóa đơn mới nhất CỦA HỢP ĐỒNG HIỆN TẠI
-            'latestInvoice' => fn($query) => $query
-                ->whereHas('lease', fn($q) => $q->where('status', 'active'))
         ])
+            ->withSum([
+                'invoices as unpaid_amount' => fn($query) => $query
+                    ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
+                    ->whereHas('lease', fn($q) => $q->where('status', 'active'))
+            ], 'remaining_amount')
+
+            ->withExists([
+                'invoices as has_any_invoice' => fn($query) => $query
+                    ->where('status', '!=', 'draft')
+                    ->whereHas('lease', fn($q) => $q->where('status', 'active'))
+            ])
             ->whereHas(
                 'property',
                 fn($query) =>
