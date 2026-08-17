@@ -31,11 +31,14 @@ class IncidentController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        // TỐI ƯU 1: Lấy trước ID khu nhà của user
+        $propertyIds = \App\Models\Property::where('user_id', $request->user()->id)->pluck('id');
+
         $incidents = Incident::query()
-            ->with(['property:id,name', 'room:id,name,property_id', 'reportedByTenant:id,full_name,phone', 'images'])
-            ->whereHas('property', function ($query) use ($request): void {
-                $query->where('user_id', $request->user()->id);
-            })
+            // TỐI ƯU 2: GỠ BỎ 'images' khỏi danh sách with() để tránh tràn RAM
+            ->with(['property:id,name', 'room:id,name,property_id', 'reportedByTenant:id,full_name,phone'])
+            // TỐI ƯU 3: Thay whereHas lồng nhau bằng whereIn trực tiếp
+            ->whereIn('property_id', $propertyIds)
             ->when($request->query('property_id'), function ($query, $propertyId): void {
                 $query->where('property_id', $propertyId);
             })
@@ -172,13 +175,13 @@ class IncidentController extends Controller
      */
     private function findOwnedIncident(int $id, int $userId): Incident
     {
+        // TỐI ƯU: Thay whereHas bằng whereIn
+        $propertyIds = \App\Models\Property::where('user_id', $userId)->pluck('id');
+
         return Incident::query()
-            ->whereHas('property', function ($query) use ($userId): void {
-                $query->where('user_id', $userId);
-            })
+            ->whereIn('property_id', $propertyIds)
             ->findOrFail($id);
     }
-
     /**
      * Hàm dùng chung đảm bảo khu nhà thuộc quyền quản lý của chủ trọ hiện tại
      */
@@ -199,12 +202,11 @@ class IncidentController extends Controller
      */
     public function countActive(Request $request): JsonResponse
     {
-        // Sử dụng hàm count() của Query Builder, nó sẽ sinh ra câu lệnh SQL: SELECT COUNT(*)
-        // Không tốn RAM để load model, không query các relationships không cần thiết.
+        // TỐI ƯU: Thay whereHas bằng whereIn
+        $propertyIds = \App\Models\Property::where('user_id', $request->user()->id)->pluck('id');
+
         $count = Incident::query()
-            ->whereHas('property', function ($query) use ($request): void {
-                $query->where('user_id', $request->user()->id);
-            })
+            ->whereIn('property_id', $propertyIds)
             ->whereIn('status', ['pending', 'processing'])
             ->count();
 

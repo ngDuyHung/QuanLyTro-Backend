@@ -42,19 +42,19 @@ class FinancialTransactionController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        // TỐI ƯU 1: Lấy trước ID khu nhà
+        $propertyIds = \App\Models\Property::where('user_id', $request->user()->id)->pluck('id');
+
         $transactions = FinancialTransaction::query()
             ->with([
                 'property:id,name',
                 'room:id,name,property_id',
-                'lease:id,room_id,tenant_id,status',
                 'tenant:id,full_name,phone',
-                'bankAccount:id,account_name,account_number,bank_name,bank_code',
-                'sepayTransaction:id,provider_transaction_id,reference_code,content,transfer_amount,match_status',
                 'allocations.invoice:id,invoice_code,status,total_amount,paid_amount,remaining_amount',
+                // TỐI ƯU 2: Đã gỡ bỏ 'lease', 'bankAccount', 'sepayTransaction' khỏi danh sách load (vì Table không dùng)
             ])
-            ->whereHas('property', function ($query) use ($request): void {
-                $query->where('user_id', $request->user()->id);
-            })
+            // TỐI ƯU 3: Thay whereHas bằng whereIn
+            ->whereIn('property_id', $propertyIds)
             ->when($request->query('property_id'), function ($query, $propertyId): void {
                 $query->where('property_id', $propertyId);
             })
@@ -93,8 +93,8 @@ class FinancialTransactionController extends Controller
                         });
                 });
             })
-            ->orderBy('transaction_date', 'desc') // Sắp xếp theo ngày mới nhất
-            ->orderBy('id', 'desc')               // Nếu trùng ngày, ID nào lớn hơn (tạo sau) lên trước
+            ->orderBy('transaction_date', 'desc')
+            ->orderBy('id', 'desc')
             ->paginate($request->integer('per_page', 15));
 
         return FinancialTransactionResource::collection($transactions)->response();
@@ -168,6 +168,8 @@ class FinancialTransactionController extends Controller
      */
     public function show(Request $request, int $id): JsonResponse
     {
+        $propertyIds = \App\Models\Property::where('user_id', $request->user()->id)->pluck('id');
+
         $transaction = FinancialTransaction::query()
             ->with([
                 'property:id,user_id,name',
@@ -178,9 +180,7 @@ class FinancialTransactionController extends Controller
                 'sepayTransaction',
                 'allocations.invoice',
             ])
-            ->whereHas('property', function ($query) use ($request): void {
-                $query->where('user_id', $request->user()->id);
-            })
+            ->whereIn('property_id', $propertyIds) // Tối ưu: Dùng whereIn
             ->findOrFail($id);
 
         return (new FinancialTransactionResource($transaction))->response();
@@ -195,12 +195,11 @@ class FinancialTransactionController extends Controller
     public function cancel(CancelFinancialTransactionRequest $request, int $id): JsonResponse
     {
         $data = $request->validated();
+        $propertyIds = \App\Models\Property::where('user_id', $request->user()->id)->pluck('id');
 
         $transaction = FinancialTransaction::query()
             ->with('allocations')
-            ->whereHas('property', function ($query) use ($request): void {
-                $query->where('user_id', $request->user()->id);
-            })
+            ->whereIn('property_id', $propertyIds) // Tối ưu: Dùng whereIn
             ->findOrFail($id);
 
         if ($transaction->status === 'cancelled') {
@@ -237,12 +236,18 @@ class FinancialTransactionController extends Controller
         ])))->response();
     }
 
+    /**
+     * Duyệt giao dịch thu chi.
+     *
+     * Chỉ áp dụng cho giao dịch PENDING.
+     * Nếu giao dịch đã CONFIRMED, không thể duyệt lại.
+     */
     public function approve(Request $request, int $id, InvoiceService $invoiceService): JsonResponse
     {
-        // 1. Check quyền sở hữu qua property
-        $transaction = FinancialTransaction::whereHas('property', function ($q) use ($request) {
-            $q->where('user_id', $request->user()->id);
-        })->findOrFail($id);
+        $propertyIds = Property::where('user_id', $request->user()->id)->pluck('id');
+
+        // Tối ưu: Check quyền sở hữu qua property_id bằng whereIn
+        $transaction = FinancialTransaction::whereIn('property_id', $propertyIds)->findOrFail($id);
 
         if ($transaction->status !== 'pending') {
             throw new BusinessException('Chỉ có thể duyệt giao dịch đang ở trạng thái chờ.');
