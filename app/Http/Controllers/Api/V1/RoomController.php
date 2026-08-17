@@ -485,67 +485,87 @@ class RoomController extends Controller
      */
     public function debtors(Request $request): JsonResponse
     {
-        $today = now()->startOfDay();
+        $today = now()->toDateString();
+        $propertyId = $request->input('property_id');
+        $userId = $request->user()->id;
 
-        $rooms = Room::with([
-            'property:id,name',
-            // SỬA LẠI DÒNG LEASES ĐỂ EAGER LOAD THÊM TENANT:
-            'leases' => fn($query) => $query->where('status', 'active')->with(['tenant:id,full_name,phone', 'invoices.allocations']),
+        // 1. Lấy thông tin các Hợp đồng đang active kèm Hóa đơn có vấn đề
+        // Chỉ lấy các hóa đơn "có nguy cơ": Đang nợ (issued, partially_paid, overdue) HOẶC Đã trả nhưng từng trả trễ (paid, partially_paid)
+        $leases = \App\Models\Lease::with([
+            'room' => function ($q) {
+                $q->select('id', 'name', 'property_id');
+            },
+            'room.property' => function ($q) {
+                $q->select('id', 'name');
+            },
+            'tenant' => function ($q) {
+                $q->select('id', 'full_name', 'phone');
+            },
+            // Chỉ Load Invoices có liên quan đến nợ nần và chỉ lấy các cột thiết yếu
+            'invoices' => function ($query) use ($today) {
+                $query->select('id', 'lease_id', 'invoice_code', 'due_date', 'remaining_amount', 'paid_amount', 'status')
+                    ->whereNotNull('due_date')
+                    ->where(function ($q) use ($today) {
+                        // 1. Đang nợ quá hạn (hiện tại)
+                        $q->where('remaining_amount', '>', 0)
+                            ->where('due_date', '<', $today)
+                            ->whereIn('status', ['issued', 'partially_paid', 'overdue']);
+                    })
+                    ->orWhere(function ($q) {
+                        // 2. Từng trả nhưng có khả năng trả trễ (có allocations)
+                        $q->where('paid_amount', '>', 0)
+                            ->whereIn('status', ['paid', 'partially_paid', 'overdue']);
+                    })
+                    // Load Allocations để tính toán thời gian trả thực tế
+                    ->with(['allocations' => function ($q) {
+                        $q->select('invoice_id', 'allocated_at');
+                    }]);
+            }
         ])
-            ->whereHas('property', fn($query) => $query->where('user_id', $request->user()->id))
-            ->when($request->filled('property_id'), fn($query) => $query->where('property_id', $request->integer('property_id')))
-            ->whereHas('leases', fn($query) => $query->where('status', 'active'))
+            ->where('status', 'active')
+            ->whereHas('room.property', function ($query) use ($userId, $propertyId) {
+                $query->where('user_id', $userId);
+                if ($propertyId) {
+                    $query->where('id', $propertyId);
+                }
+            })
             ->get();
 
         $debtors = collect();
+        $todayCarbon = now()->startOfDay();
 
-        foreach ($rooms as $room) {
-            $lease = $room->leases->first();
-            if (!$lease) continue;
-
-            $tenant = $lease->tenant;
-
+        // 2. Xử lý Logic Nhẹ trên PHP dựa vào Dataset đã tinh gọn
+        foreach ($leases as $lease) {
             $invoices = $lease->invoices;
-            $totalInvoices = $invoices->count();
-            if ($totalInvoices === 0) continue;
+            if ($invoices->isEmpty()) continue;
 
             $latePaymentCount = 0;
             $currentOverdueAmount = 0;
             $totalUnpaidAmount = 0;
-            $textDetails = []; // Mảng lưu chi tiết từng vi phạm
+            $textDetails = [];
 
             foreach ($invoices as $invoice) {
-                if ($invoice->remaining_amount > 0) {
-                    $totalUnpaidAmount += $invoice->remaining_amount;
-                }
-
-                if (!$invoice->due_date) continue;
-                $dueDate = \Carbon\Carbon::parse($invoice->due_date)->startOfDay();
-
+                $dueDateCarbon = \Carbon\Carbon::parse($invoice->due_date)->startOfDay();
                 $isLate = false;
 
-                // 1. ĐANG NỢ QUÁ HẠN HIỆN TẠI
-                if ($invoice->remaining_amount > 0 && $today->gt($dueDate)) {
+                // 2.1 Tính nợ quá hạn hiện tại
+                if ($invoice->remaining_amount > 0 && $todayCarbon->gt($dueDateCarbon)) {
                     $isLate = true;
                     $currentOverdueAmount += $invoice->remaining_amount;
-
-                    //difInDays dùng để tính số ngày quá hạn
-                    $daysOverdue = $today->diffInDays($dueDate);
+                    $totalUnpaidAmount += $invoice->remaining_amount;
+                    $daysOverdue = $todayCarbon->diffInDays($dueDateCarbon);
                     $formattedAmount = number_format((float)$invoice->remaining_amount, 0, ',', '.');
-
                     $textDetails[] = "HĐ {$invoice->invoice_code}: Đang nợ {$formattedAmount}đ (Quá hạn {$daysOverdue} ngày)";
                 }
-                // 2. LỊCH SỬ TỪNG TRẢ TRỄ
-                elseif ($invoice->paid_amount > 0) {
+                // 2.2 Tính lịch sử trả trễ
+                elseif ($invoice->paid_amount > 0 && $invoice->allocations->isNotEmpty()) {
                     $lastPayment = $invoice->allocations->max('allocated_at');
-                    if ($lastPayment) {
+                    $lastPaymentDate = \Carbon\Carbon::parse($lastPayment)->startOfDay();
 
-                        $lastPaymentDate = \Carbon\Carbon::parse($lastPayment)->startOfDay();
-                        if ($lastPaymentDate->gt($dueDate)) {
-                            $isLate = true;
-                            $daysLate = $lastPaymentDate->diffInDays($dueDate);
-                            $textDetails[] = "HĐ {$invoice->invoice_code}: Đã đóng trễ ({$daysLate} ngày)";
-                        }
+                    if ($lastPaymentDate->gt($dueDateCarbon)) {
+                        $isLate = true;
+                        $daysLate = $lastPaymentDate->diffInDays($dueDateCarbon);
+                        $textDetails[] = "HĐ {$invoice->invoice_code}: Đã đóng trễ ({$daysLate} ngày)";
                     }
                 }
 
@@ -557,19 +577,18 @@ class RoomController extends Controller
             // ĐIỀU KIỆN ĐƯA VÀO DANH SÁCH ĐEN: Đang có nợ quá hạn HOẶC từng trễ từ 2 lần trở lên
             if ($currentOverdueAmount > 0 || $latePaymentCount >= 2) {
                 $debtors->push([
-                    'room_id' => $room->id,
-                    'room_name' => $room->name,
-                    'property_name' => $room->property->name ?? 'Không xác định',
-                    'tenant_name' => $tenant ? $tenant->full_name : 'Khách thuê (Không xác định)',
-                    'tenant_phone' => $tenant ? $tenant->phone : 'N/A',
+                    'room_id' => $lease->room->id ?? 0,
+                    'room_name' => $lease->room->name ?? 'N/A',
+                    'property_name' => $lease->room->property->name ?? 'Không xác định',
+                    'tenant_name' => $lease->tenant->full_name ?? 'Khách thuê (Không xác định)',
+                    'tenant_phone' => $lease->tenant->phone ?? 'N/A',
                     'total_unpaid_amount' => $totalUnpaidAmount,
                     'current_overdue_amount' => $currentOverdueAmount,
                     'late_payment_count' => $latePaymentCount,
-                    'violation_details' => $textDetails, // Đẩy mảng chi tiết ra API
+                    'violation_details' => $textDetails,
                 ]);
             }
         }
-
         $debtors = $debtors->sortByDesc('current_overdue_amount')->sortByDesc('late_payment_count')->values();
 
         return response()->json([
