@@ -111,6 +111,17 @@ class TenantService
             throw new BusinessException('Khách thuê này đang là người đứng tên đại diện của phòng này, không thể thêm làm người ở ghép.');
         }
 
+        // Kiểm tra xem khách có đang là ĐẠI DIỆN của bất kỳ phòng nào khác không
+        $activeRepresentativeLease = \App\Models\Lease::where('tenant_id', $tenant->id)
+            ->where('status', 'active')
+            ->with('room:id,name')
+            ->first();
+
+        if ($activeRepresentativeLease) {
+            $roomName = $activeRepresentativeLease->room?->name ?? 'phòng khác';
+            throw new BusinessException("Khách thuê (SĐT) này hiện đang đứng tên hợp đồng tại {$roomName}. Một người không thể vừa làm chủ phòng vừa đi ở ghép.");
+        }
+
         $activeRoommate = LeaseMember::where('tenant_id', $tenant->id)
             ->whereNull('move_out_date')
             ->whereHas('lease.room.property', fn($query) => $query->where('user_id', $tenant->owner_id))

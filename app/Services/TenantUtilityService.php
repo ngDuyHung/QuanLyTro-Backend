@@ -23,11 +23,15 @@ class TenantUtilityService
      */
     private function getActiveLease(int $userId, ?int $leaseId = null): Lease
     {
+        // TỐI ƯU: Truy xuất ID trực tiếp thay vì dùng whereHas lồng nhau
+        $tenantIds = \App\Models\Tenant::where('user_id', $userId)->pluck('id')->toArray();
+        $memberLeaseIds = \App\Models\LeaseMember::whereIn('tenant_id', $tenantIds)->pluck('lease_id')->toArray();
+
         $query = Lease::with(['room:id,name,property_id', 'room.property:id,name'])
             ->where('status', 'active')
-            ->where(function (Builder $q) use ($userId) {
-                $q->whereHas('tenant', fn($t) => $t->where('user_id', $userId))
-                  ->orWhereHas('members.tenant', fn($t) => $t->where('user_id', $userId));
+            ->where(function (Builder $q) use ($tenantIds, $memberLeaseIds) {
+                $q->whereIn('tenant_id', $tenantIds)
+                    ->orWhereIn('id', $memberLeaseIds);
             });
 
         if ($leaseId) {
@@ -92,7 +96,7 @@ class TenantUtilityService
 
         // ... Các phần dưới giữ nguyên không đổi ...
         $readingDate = $data['reading_date'];
-        $month = substr($readingDate, 0, 7); 
+        $month = substr($readingDate, 0, 7);
 
         $existing = MeterReading::where('lease_id', $lease->id)
             ->where('reading_date', 'like', $month . '%')

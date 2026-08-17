@@ -120,23 +120,29 @@ class NotificationController extends Controller
     private function sendPushNotification(Notification $notification): void
     {
         $landlordId = $notification->user_id;
-        $userIds = [];
 
-        // Trích xuất user_id của Khách Thuê đang active
-        $baseQuery = Lease::where('status', 'active')
-            ->whereHas('tenant', fn($q) => $q->whereNotNull('user_id'))
-            ->with('tenant');
+        $baseQuery = Lease::query()->where('status', 'active');
 
+        // TỐI ƯU 1: Loại bỏ whereHas lồng nhau, dùng pluck để lấy mảng ID
         if ($notification->target_type === 'all') {
-            $userIds = $baseQuery->whereHas('room.property', fn($q) => $q->where('user_id', $landlordId))
-                ->get()->pluck('tenant.user_id')->toArray();
+            $propertyIds = \App\Models\Property::where('user_id', $landlordId)->pluck('id');
+            $roomIds = \App\Models\Room::whereIn('property_id', $propertyIds)->pluck('id');
+            $baseQuery->whereIn('room_id', $roomIds);
         } elseif ($notification->target_type === 'property') {
-            $userIds = $baseQuery->whereHas('room', fn($q) => $q->where('property_id', $notification->target_id))
-                ->get()->pluck('tenant.user_id')->toArray();
+            $roomIds = \App\Models\Room::where('property_id', $notification->target_id)->pluck('id');
+            $baseQuery->whereIn('room_id', $roomIds);
         } elseif ($notification->target_type === 'room') {
-            $userIds = $baseQuery->where('room_id', $notification->target_id)
-                ->get()->pluck('tenant.user_id')->toArray();
+            $baseQuery->where('room_id', $notification->target_id);
         }
+
+        // TỐI ƯU 2: Pluck ID trực tiếp từ DB, KHÔNG dùng ->get() để tránh tràn RAM
+        $tenantIds = $baseQuery->pluck('tenant_id')->toArray();
+
+        // Query riêng bảng Tenant để lấy user_id
+        $userIds = \App\Models\Tenant::whereIn('id', $tenantIds)
+            ->whereNotNull('user_id')
+            ->pluck('user_id')
+            ->toArray();
 
         $userIds = array_unique($userIds);
 
@@ -147,7 +153,7 @@ class NotificationController extends Controller
                 $payload = [
                     'title' => $notification->title,
                     // Lọc bỏ HTML tag trong Jodit Editor để lấy text thuần làm body
-                    'body' => str::limit(strip_tags($notification->content), 100),
+                    'body' => Str::limit(strip_tags($notification->content), 100),
                     'url' => $notification->action_url ?? '/tenant/notifications',
                     'icon' => '/icon.png'
                 ];

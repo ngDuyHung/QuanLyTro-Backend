@@ -71,6 +71,16 @@ class LeaseService
 
                 $tenant = $this->tenantService->createProfile(array_merge($data['tenant'], ['user_id' => $accountTenat->id]), $userId);
 
+                // Kiểm tra xem khách (SĐT) này có đang đi ở ghép ở đâu không
+                $activeRoommate = \App\Models\LeaseMember::where('tenant_id', $tenant->id)
+                    ->whereNull('move_out_date')
+                    ->with('lease.room:id,name')
+                    ->first();
+
+                if ($activeRoommate) {
+                    $roomName = $activeRoommate->lease?->room?->name ?? 'phòng khác';
+                    throw new BusinessException("Khách hàng này đang là người ở ghép tại {$roomName}. Vui lòng cho khách 'Rời phòng' cũ trước khi lập hợp đồng đại diện mới.");
+                }
 
                 $createdTenantId = $tenant->id;
 

@@ -16,7 +16,7 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'phone'    => ['required', 'string', 'regex:/^0[0-9]{9}$/'],
+            'phone'    => ['required', 'string', 'regex:/^0[0-9]{8,14}$/'],
             'password' => ['required', 'string'],
             'zalo_link_token' => ['nullable', 'string'],
         ];
@@ -26,7 +26,7 @@ class LoginRequest extends FormRequest
     {
         return [
             'phone.required'    => 'Số điện thoại không được để trống.',
-            'phone.regex'       => 'Số điện thoại phải gồm 10 số và bắt đầu bằng số 0.',
+            'phone.regex'       => 'Số điện thoại phải bắt đầu bằng số 0 và có từ 9 đến 15 chữ số.',
             'password.required' => 'Mật khẩu không được để trống.',
             'zalo_link_token.string' => 'Phiên liên kết Zalo không hợp lệ.',
         ];

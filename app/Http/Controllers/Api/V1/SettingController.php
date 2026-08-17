@@ -226,11 +226,32 @@ class SettingController extends Controller
         $landlordId = $request->user()->id;
         $currentMonth = now()->format('Y-m'); // Dùng tháng hiện tại để test
 
-        // 1. Lấy tất cả hợp đồng ĐANG ACTIVE của CHÍNH CHỦ TRỌ NÀY
+        // 1. TỐI ƯU: Lấy danh sách phòng thuộc quyền sở hữu (Bỏ whereHas)
+        $propertyIds = \App\Models\Property::where('user_id', $landlordId)->pluck('id');
+        $roomIdsAuth = \App\Models\Room::whereIn('property_id', $propertyIds)->pluck('id');
+
         $leases = Lease::with(['tenant', 'room'])
-            ->whereHas('room.property', fn($q) => $q->where('user_id', $landlordId))
+            ->whereIn('room_id', $roomIdsAuth)
             ->where('status', 'active')
             ->get();
+
+        // 2. TỐI ƯU N+1 QUERY: Kéo toàn bộ dữ liệu chỉ số và thông báo 1 lần duy nhất
+        $leaseIds = $leases->pluck('id')->toArray();
+        $roomIds = $leases->pluck('room_id')->toArray();
+
+        $readingsThisMonth = MeterReading::whereIn('lease_id', $leaseIds)
+            ->where('reading_date', 'like', $currentMonth . '%')
+            ->pluck('lease_id')
+            ->toArray();
+
+        $notificationsThisMonth = Notification::whereIn('target_id', $roomIds)
+            ->where('target_type', 'room')
+            ->where('type', 'system')
+            ->where('title', 'like', '%[TEST LỤẬN VĂN]%')
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->pluck('target_id')
+            ->toArray();
 
         $userIdsToNotify = [];
         $notificationsToInsert = [];
@@ -238,32 +259,21 @@ class SettingController extends Controller
         foreach ($leases as $lease) {
             if (!$lease->tenant || !$lease->tenant->user_id) continue;
 
-            // Kiểm tra xem phòng này đã chốt chỉ số tháng hiện tại chưa
-            $hasReading = MeterReading::where('lease_id', $lease->id)
-                ->where('reading_date', 'like', $currentMonth . '%')
-                ->exists();
-
-            // Kiểm tra xem đã từng bị test push trong tháng này chưa
-            $hasNotified = Notification::where('target_id', $lease->room_id)
-                ->where('target_type', 'room')
-                ->where('type', 'system')
-                ->where('title', 'like', '%[TEST LỤẬN VĂN]%') // Gắn flag để dễ phân biệt
-                ->whereMonth('created_at', now()->month)
-                ->whereYear('created_at', now()->year)
-                ->exists();
+            // 3. TỐI ƯU: Kiểm tra ngay trên RAM (array) thay vì query Database
+            $hasReading = in_array($lease->id, $readingsThisMonth);
+            $hasNotified = in_array($lease->room_id, $notificationsThisMonth);
 
             if (!$hasReading && !$hasNotified) {
-                $userId = $lease->tenant->user_id;
-                $userIdsToNotify[] = $userId;
+                $userIdsToNotify[] = $lease->tenant->user_id;
 
                 $notificationsToInsert[] = [
                     'user_id' => $landlordId,
                     'title' => "[TEST] Đã đến hạn chốt điện/nước phòng {$lease->room->name}",
                     'content' => "Đây là thông báo demo từ hệ thống. Vui lòng nhập chỉ số điện nước.",
-                    'type' => 'system', // Phân loại vào tab Hệ thống
+                    'type' => 'system',
                     'target_type' => 'room',
                     'target_id' => $lease->room_id,
-                    'action_url' => '/tenant/utilities?action=submit_reading',
+                    'action_url' => '/tenant/utilities?action=submit_reading&lease_id=' . $lease->id,
                     'status' => 'published',
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -286,7 +296,7 @@ class SettingController extends Controller
             $payload = [
                 'title' => 'Chốt chỉ số điện nước (Demo) ⚡💧',
                 'body' => 'Hệ thống đang chạy test workflow. Nhấp vào đây để xem.',
-                'url' => '/tenant/utilities?action=submit_reading',
+                'action_url' => '/tenant/utilities?action=submit_reading&lease_id=' . $lease->id,
                 'icon' => '/icon.png'
             ];
 
