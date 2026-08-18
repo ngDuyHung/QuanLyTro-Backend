@@ -17,62 +17,82 @@ class AccountingLedgerService
      * Xem trước dữ liệu Sổ kế toán (Chưa lưu)
      * Trả về tổng doanh thu và danh sách các dòng chi tiết để Frontend hiển thị Table
      */
-    public function previewLedger(int $userId, ?int $propertyId, string $periodType, int $year, ?int $month): array
+    public function previewLedger(int $userId, ?int $propertyId, string $periodType, int $year, ?int $month, bool $includeDeposit = false): array
     {
-        // 1. Lấy tất cả phiếu THU, ĐÃ XÁC NHẬN, và ĐƯỢC TÍNH LÀ DOANH THU
-        $query = FinancialTransaction::query()
-            ->with(['allocations.invoice.items']) // Eager load để lấy chi tiết hóa đơn
-            ->whereHas('property', function ($q) use ($userId): void {
-                $q->where('user_id', $userId);
-            })
-            ->income()
-            ->confirmed()
-            ->where('accounting_type', 'revenue')
-            ->whereYear('transaction_date', $year);
+        $propertyIds = $propertyId
+            ? [$propertyId]
+            : \App\Models\Property::where('user_id', $userId)->pluck('id')->toArray();
 
-        if ($propertyId) {
-            $query->where('property_id', $propertyId);
+        if (empty($propertyIds)) {
+            return ['total_revenue' => 0, 'details' => []];
         }
 
-        // Nếu chốt theo tháng thì lọc thêm tháng
+        $query = FinancialTransaction::query()
+            ->select('id', 'transaction_date', 'transaction_code', 'description', 'amount', 'accounting_type')
+            ->with([
+                'allocations:id,financial_transaction_id,invoice_id',
+                'allocations.invoice:id',
+                'allocations.invoice.items:id,invoice_id,charge_type,amount,description'
+            ])
+            ->whereIn('property_id', $propertyIds)
+            ->income()
+            ->confirmed()
+            ->whereYear('transaction_date', $year);
+
+        // LOGIC CHÍNH: Nếu gộp cọc thì lấy cả 2, nếu không thì chỉ lấy doanh thu
+        if ($includeDeposit) {
+            $query->whereIn('accounting_type', ['revenue', 'liability_in']);
+        } else {
+            $query->where('accounting_type', 'revenue');
+        }
+
         if ($periodType === 'month' && $month) {
             $query->whereMonth('transaction_date', $month);
         }
 
-        // Sổ kế toán phải sắp xếp theo trình tự thời gian
         $transactions = $query->orderBy('transaction_date', 'asc')->get();
 
         $totalRevenue = 0;
         $ledgerRows = [];
 
         foreach ($transactions as $tx) {
-            $totalRevenue += $tx->amount;
-
-            // Xây dựng chuỗi Diễn giải từ các item của hóa đơn
+            $amount = (int) $tx->amount; // Số tiền gốc của phiếu thu, KHÔNG TRỪ GÌ CẢ
             $itemNames = [];
+
+            // Xử lý lấy diễn giải (Description) từ chi tiết hóa đơn (nếu có)
             if ($tx->allocations->isNotEmpty()) {
                 foreach ($tx->allocations as $allocation) {
-                    if ($allocation->invoice) {
+                    if ($allocation->invoice && $allocation->invoice->items->isNotEmpty()) {
                         foreach ($allocation->invoice->items as $item) {
-                            // Lấy tên các khoản thu (VD: Tiền phòng, Điện, Nước)
+
+                            // Nếu phiếu thu này là Doanh thu, bỏ qua mô tả của dòng "Tiền cọc"
+                            if ($tx->accounting_type === 'revenue' && $item->charge_type === 'deposit') {
+                                continue;
+                            }
+                            // Nếu phiếu thu này là Tiền cọc, CHỈ lấy mô tả của dòng "Tiền cọc"
+                            if ($tx->accounting_type === 'liability_in' && $item->charge_type !== 'deposit') {
+                                continue;
+                            }
+
                             $itemNames[] = $item->description;
                         }
                     }
                 }
             }
 
-            // Nếu có chi tiết item thì nối chuỗi lại (loại bỏ các tên trùng lặp)
-            // Nếu không có (nhập thủ công) thì lấy description gốc của phiếu thu
-            $description = empty($itemNames)
-                ? $tx->description
-                : implode(', ', array_unique($itemNames));
+            $totalRevenue += $amount;
 
-            // Gom vào mảng dữ liệu tạm
+            $formattedDate = $tx->transaction_date
+                ? substr((string)$tx->transaction_date, 0, 10)
+                : null;
+
+            // Nếu $itemNames rỗng (VD: Phiếu thu cọc giữ chỗ từ RoomReservation không có hóa đơn), 
+            // lấy trực tiếp mô tả gốc của phiếu thu ($tx->description)
             $ledgerRows[] = [
-                'transaction_date' => $tx->transaction_date ? Carbon::parse($tx->transaction_date)->format('Y-m-d') : null,
+                'transaction_date' => $formattedDate,
                 'transaction_code' => $tx->transaction_code,
-                'description'      => $description,
-                'amount'           => (int) $tx->amount,
+                'description'      => empty($itemNames) ? $tx->description : implode(', ', array_unique($itemNames)),
+                'amount'           => $amount,
             ];
         }
 

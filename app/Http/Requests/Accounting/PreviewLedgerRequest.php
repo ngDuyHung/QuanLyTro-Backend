@@ -37,6 +37,7 @@ class PreviewLedgerRequest extends FormRequest
             'period_type'  => ['required', 'string', 'in:month,quarter,year'],
             'period_year'  => ['required', 'integer', 'min:2000', 'max:2100'],
             'period_month' => ['required_if:period_type,month', 'nullable', 'integer', 'min:1', 'max:12'],
+            'include_deposit' => ['nullable', 'boolean'],
         ];
     }
 

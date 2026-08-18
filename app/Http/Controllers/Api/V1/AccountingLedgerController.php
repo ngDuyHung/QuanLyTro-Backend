@@ -53,7 +53,8 @@ class AccountingLedgerController extends Controller
             $request->property_id ? (int) $request->property_id : null,
             $request->period_type,
             (int) $request->period_year,
-            $request->period_month ? (int) $request->period_month : null
+            $request->period_month ? (int) $request->period_month : null,
+            $request->boolean('include_deposit')
         );
 
         return response()->json([
