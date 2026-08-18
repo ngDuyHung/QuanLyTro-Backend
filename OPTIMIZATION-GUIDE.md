@@ -23,7 +23,7 @@ APP_ENV=production
 APP_DEBUG=false
 # Chuyển từ file hoặc database sang APC để dùng RAM làm bộ nhớ đệm
 
-'CACHE_STORE=apap' hoặc 'CACHE_DRIVER=apc' tùy phiên bản ( cái này trên share hosting nên bỏ đi vì vải rest lại cach mỗi lần update code nếu không sẽ vẫn ở code cũ - tắt cả ở exten)
+'CACHE_STORE=apap' hoặc 'CACHE_DRIVER=apc' tùy phiên bản ( cái này trên share hosting nên bỏ đi vì vải rest lại cach mỗi lần update code nếu không sẽ vẫn ở code cũ - tắt cả ở exten -  tắt luôn cả igbinary( trở nên vô dùng nếu không có apcu))
 
 
 
