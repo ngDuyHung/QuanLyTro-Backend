@@ -54,6 +54,10 @@ class InvoiceController extends Controller
                     $q->where('status', 'pending');
                 });
             }])
+            // TỐI ƯU 4: Chỉ lấy khi có filter, tránh n+1 query khi FE không filter
+            ->when($request->boolean('include_details'), function ($query) {
+                $query->with(['items', 'meterReadings']);
+            })
             ->when($request->query('property_id'), function ($query, $propertyId): void {
                 $query->where('property_id', $propertyId);
             })
