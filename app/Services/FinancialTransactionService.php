@@ -44,7 +44,7 @@ class FinancialTransactionService
             }
 
             $transactionDate = Carbon::parse($data['transaction_date'] ?? now());
-            $limitDate = Carbon::parse($invoice->issue_date ?? $invoice->period_from)->startOfDay();
+            $limitDate = Carbon::parse($invoice->period_from ?? $invoice->issue_date)->startOfDay();
 
             if ($transactionDate->lt($limitDate)) {
                 throw new BusinessException('Ngày thu tiền không hợp lệ (không được trước ngày hóa đơn được phát hành).');
