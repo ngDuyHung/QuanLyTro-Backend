@@ -51,6 +51,10 @@ class LeaseController extends Controller
             'room.property:id,name',
             'tenant:id,full_name,phone',
         ])
+            // Chỉ load relation 'invoices' khi Frontend truyền tham số include_invoices=true
+            ->when($request->boolean('include_invoices'), function ($query) {
+                $query->with('invoices:id,lease_id,status,remaining_amount,period_to');
+            })
             ->whereIn('room_id', $roomIds)
 
             // --- TÍNH NĂNG TÌM KIẾM BỔ SUNG ---
