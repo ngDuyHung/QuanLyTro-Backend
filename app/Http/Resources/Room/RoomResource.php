@@ -18,7 +18,7 @@ class RoomResource extends JsonResource
         if ($this->status?->value === 'occupied') {
             if ($this->unpaid_amount > 0) {
                 $paymentStatus = 'debt';
-            } elseif ($this->has_any_invoice) {
+            } elseif ($this->has_current_month_invoice) {
                 $paymentStatus = 'paid';
             } else {
                 $paymentStatus = 'unbilled';

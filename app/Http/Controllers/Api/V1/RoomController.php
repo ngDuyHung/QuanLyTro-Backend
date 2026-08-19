@@ -33,6 +33,10 @@ class RoomController extends Controller
      */
     public function index(Request $request, int $propertyId): JsonResponse
     {
+
+        $startOfMonth = now()->startOfMonth()->toDateString(); // VD: 2026-08-01
+        $endOfMonth = now()->endOfMonth()->toDateString();     // VD: 2026-08-31
+
         // Kiểm tra khu nhà có thuộc chủ trọ này không
         $property = Property::where('user_id', $request->user()->id)->findOrFail($propertyId);
 
@@ -50,11 +54,13 @@ class RoomController extends Controller
                     ->whereIn('status', ['issued', 'partially_paid', 'overdue'])
                     ->whereHas('lease', fn($q) => $q->where('status', 'active'))
             ], 'remaining_amount')
-
-            // Kiểm tra xem phòng có tồn tại hóa đơn nào của hợp đồng active không (để xác định trạng thái paid/unbilled)
+            // Tính xem có hóa đơn nào trong tháng hiện tại hay không
             ->withExists([
-                'invoices as has_any_invoice' => fn($query) => $query
-                    ->where('status', '!=', 'draft') // Bỏ qua hóa đơn nháp
+                'invoices as has_current_month_invoice' => fn($query) => $query
+                    ->where('status', '!=', 'draft')
+                    // Dùng >= và <= để tận dụng tối đa sức mạnh của Database Index
+                    ->where('period_from', '>=', $startOfMonth)
+                    ->where('period_from', '<=', $endOfMonth)
                     ->whereHas('lease', fn($q) => $q->where('status', 'active'))
             ])
             ->where('property_id', $property->id)
@@ -90,6 +96,9 @@ class RoomController extends Controller
 
     public function all(Request $request): JsonResponse
     {
+        $startOfMonth = now()->startOfMonth()->toDateString(); // VD: 2026-08-01
+        $endOfMonth = now()->endOfMonth()->toDateString();     // VD: 2026-08-31
+
         $rooms = Room::with([
             'property',
             'images' => fn($query) => $query->orderBy('sort_order'),
@@ -103,9 +112,13 @@ class RoomController extends Controller
                     ->whereHas('lease', fn($q) => $q->where('status', 'active'))
             ], 'remaining_amount')
 
+            // Tính xem có hóa đơn nào trong tháng hiện tại hay không
             ->withExists([
-                'invoices as has_any_invoice' => fn($query) => $query
+                'invoices as has_current_month_invoice' => fn($query) => $query
                     ->where('status', '!=', 'draft')
+                    // Dùng >= và <= để tận dụng tối đa sức mạnh của Database Index
+                    ->where('period_from', '>=', $startOfMonth)
+                    ->where('period_from', '<=', $endOfMonth)
                     ->whereHas('lease', fn($q) => $q->where('status', 'active'))
             ])
             ->whereHas(
