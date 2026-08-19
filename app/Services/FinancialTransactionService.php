@@ -73,25 +73,6 @@ class FinancialTransactionService
 
             $primaryTransaction = null;
 
-            if ($split['revenue'] > 0) {
-                $primaryTransaction = FinancialTransaction::create([
-                    ...$sharedFields,
-                    'transaction_code' => $this->generateTransactionCode('income'),
-                    'direction' => 'income',
-                    'category' => 'invoice_payment',
-                    'accounting_type' => 'revenue',
-                    'amount' => $split['revenue'],
-                    'description' => $data['description'] ?? "Thanh toán hóa đơn {$invoice->invoice_code}",
-                ]);
-
-                $this->allocateToInvoice(
-                    transaction: $primaryTransaction,
-                    invoice: $invoice,
-                    amount: $split['revenue'],
-                    userId: $userId
-                );
-            }
-
             if ($split['deposit'] > 0) {
                 $depositTransaction = FinancialTransaction::create([
                     ...$sharedFields,
@@ -112,6 +93,27 @@ class FinancialTransactionService
 
                 $primaryTransaction ??= $depositTransaction;
             }
+
+            if ($split['revenue'] > 0) {
+                $primaryTransaction = FinancialTransaction::create([
+                    ...$sharedFields,
+                    'transaction_code' => $this->generateTransactionCode('income'),
+                    'direction' => 'income',
+                    'category' => 'invoice_payment',
+                    'accounting_type' => 'revenue',
+                    'amount' => $split['revenue'],
+                    'description' => $data['description'] ?? "Thanh toán hóa đơn {$invoice->invoice_code}",
+                ]);
+
+                $this->allocateToInvoice(
+                    transaction: $primaryTransaction,
+                    invoice: $invoice,
+                    amount: $split['revenue'],
+                    userId: $userId
+                );
+            }
+
+
 
             return $primaryTransaction->fresh([
                 'property',
@@ -323,7 +325,7 @@ class FinancialTransactionService
                 'room_id' => $data['room_id'] ?? null,
                 'lease_id' => $data['lease_id'] ?? null,
                 'tenant_id' => $data['tenant_id'] ?? null,
-                'tenant_name_snapshot' => ($data['tenant_id'] ?? null) 
+                'tenant_name_snapshot' => ($data['tenant_id'] ?? null)
                     ? Tenant::find($data['tenant_id'])?->full_name
                     : null,
                 'bank_account_id' => $data['bank_account_id'] ?? null,
