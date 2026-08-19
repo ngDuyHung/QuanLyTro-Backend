@@ -360,7 +360,9 @@ class SettingService
         };
 
         // 3. Chuẩn bị các biến dữ liệu
-        $representative_name = $ledger->property ? mb_strtoupper($ledger->property->representative_name, 'UTF-8') : '................................';
+        $representative_name = ($ledger->property && $ledger->property->representative_name)
+            ? mb_strtoupper($ledger->property->representative_name, 'UTF-8')
+            : '................................';
         $propertyAddress = $ledger->property ? $ledger->property->address : '................................................';
         $taxCode = ($ledger->property && $ledger->property->tax_code) ? $ledger->property->tax_code : '................................';
         $repName = ($ledger->property && $ledger->property->representative_name) ? mb_strtoupper($ledger->property->representative_name, 'UTF-8') : '';
