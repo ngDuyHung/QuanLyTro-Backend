@@ -47,6 +47,13 @@ class InvoiceController extends Controller
                 'room:id,property_id,name',
                 'property:id,user_id,name',
                 // ĐÃ GỠ BỎ: 'items', 'meterReadings', 'allocations.financialTransaction'
+
+                // Chỉ eager load 'allocations' VÀ 'financialTransaction' NẾU giao dịch đó đang 'pending'
+                'allocations' => function ($query) {
+                    $query->whereHas('financialTransaction', function ($q) {
+                        $q->where('status', 'pending');
+                    })->with('financialTransaction'); // Load kèm chi tiết ảnh, số tiền để Frontend render
+                }
             ])
             // TỐI ƯU 3: Đẩy việc tính toán "có giao dịch chờ duyệt không" xuống tầng Database
             ->withExists(['allocations as has_pending_transaction' => function ($query) {
