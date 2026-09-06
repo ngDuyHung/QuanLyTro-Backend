@@ -53,6 +53,7 @@ class StoreInvoiceRequest extends FormRequest
             'items.*.quantity' => ['required', 'numeric', 'min:0'],
             'items.*.unit_price_snapshot' => ['required', 'integer'],
             'items.*.free_quantity_snapshot' => ['nullable', 'numeric', 'min:0'],
+            'items.*.base_price_snapshot' => ['nullable', 'integer', 'min:0'],
 
             // Đã đặt nullable đúng chỗ, Backend service sẽ tự tính amount
             'items.*.amount' => ['nullable', 'integer'],

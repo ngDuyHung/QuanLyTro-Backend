@@ -1,5 +1,7 @@
 <?php
+
 declare(strict_types=1);
+
 namespace App\Http\Resources\ServicePrice;
 
 use Illuminate\Http\Request;
@@ -7,7 +9,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class ServicePriceResource extends JsonResource
 {
-    
+
     public function toArray(Request $request): array
     {
         return [
@@ -16,6 +18,7 @@ class ServicePriceResource extends JsonResource
             'service_type'   => $this->service_type?->value,
             'service_type_label' => $this->service_type?->label(),
             'unit_price'     => $this->unit_price,
+            'base_price'     => $this->base_price,
             'free_units'     => $this->free_units,
             'free_unit_type' => $this->free_unit_type?->value,
             'free_unit_type_label' => $this->free_unit_type?->label(),
@@ -27,7 +30,7 @@ class ServicePriceResource extends JsonResource
 
             //Lịch sủ thay đổi giá (chỉ hiện khi đã được load)
             'price_histories' => $this->whenLoaded('priceHistories', function () {
-                return $this->priceHistories->map(fn ($history) => [
+                return $this->priceHistories->map(fn($history) => [
                     'id' => $history->id,
                     'user_id' => $history->user_id,
                     'old_price' => $history->old_price,

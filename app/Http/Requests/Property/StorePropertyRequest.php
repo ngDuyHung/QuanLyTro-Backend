@@ -54,6 +54,7 @@ class StorePropertyRequest extends FormRequest
             'services'                  => ['nullable', 'array'],
             'services.*.service_type'   => ['required', 'string', new Enum(\App\Enums\ServiceType::class)],
             'services.*.unit_price'     => ['required', 'integer', 'min:0'],
+            'services.*.base_price'     => ['nullable', 'integer', 'min:0'],
             'services.*.free_units'     => ['nullable', 'integer', 'min:0'],
             'services.*.free_unit_type' => ['nullable', new Enum(\App\Enums\FreeUnitType::class)],
         ];
@@ -107,6 +108,8 @@ class StorePropertyRequest extends FormRequest
             'services.*.unit_price.required' => 'Đơn giá dịch vụ không được để trống.',
             'services.*.unit_price.integer' => 'Đơn giá dịch vụ phải là số nguyên.',
             'services.*.unit_price.min' => 'Đơn giá dịch vụ không được nhỏ hơn 0.',
+            'services.*.base_price.integer' => 'Phí cơ bản phải là số nguyên.',
+            'services.*.base_price.min' => 'Phí cơ bản không được nhỏ hơn 0.',
             'services.*.free_units.integer' => 'Số lượng miễn phí phải là số nguyên.',
             'services.*.free_units.min' => 'Số lượng miễn phí không được nhỏ hơn 0.',
             'services.*.free_unit_type.enum' => 'Loại đơn vị miễn phí không hợp lệ.',
@@ -132,6 +135,7 @@ class StorePropertyRequest extends FormRequest
             'description' => 'mô tả',
             'services.*.service_type' => 'loại dịch vụ',
             'services.*.unit_price' => 'đơn giá dịch vụ',
+            'services.*.base_price' => 'phí cơ bản/Cố định',
             'services.*.free_units' => 'số lượng miễn phí',
             'services.*.free_unit_type' => 'loại đơn vị miễn phí',
         ];

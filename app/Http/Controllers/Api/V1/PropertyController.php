@@ -93,6 +93,7 @@ class PropertyController extends Controller
                         'property_id'    => $property->id,
                         'service_type'   => $service['service_type'],
                         'unit_price'     => $service['unit_price'],
+                        'base_price'    => $service['base_price'] ?? 0,
                         'free_units'     => $service['free_units'] ?? 0,
                         'free_unit_type' => $service['free_unit_type'] ?? null,
                         'effective_date' => now()->toDateString(),
@@ -177,6 +178,7 @@ class PropertyController extends Controller
                         [
                             'unit_price'     => $svc['unit_price'],
                             'free_units'     => $svc['free_units'] ?? 0,
+                            'base_price'    => $svc['base_price'] ?? 0,
                             'free_unit_type' => $svc['free_unit_type'] ?? 'none',
                             'effective_date' => now()->toDateString(), // Khi update không nên ghi đè effective_date liên tục để bảo toàn tính lịch s
                             // Khi update không nên ghi đè effective_date liên tục để bảo toàn tính lịch sử

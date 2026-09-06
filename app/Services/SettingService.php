@@ -242,25 +242,33 @@ class SettingService
             $price = number_format((float) $item->unit_price_snapshot, 0, ',', '.');
             $amount = number_format((float) $item->amount, 0, ',', '.');
 
+            $basePrice = (float) ($item->base_price_snapshot ?? 0);
+            $basePriceStr = number_format($basePrice, 0, ',', '.');
+
             // -- LOGIC GHI CHÚ CHỈ SỐ --
             $detailText = '';
             if (in_array($item->charge_type, ['electricity', 'water'])) {
                 $meter = $invoice->meterReadings->where('type', $item->charge_type)->first();
                 if ($meter) {
                     $detailText = "<br><span style='font-size: 11px; color: #64748b; font-weight: normal;'>( Mới: {$meter->current_reading} - Cũ: {$meter->previous_reading}";
+
                     if ($free > 0) $detailText .= " - Miễn phí: {$free}";
+                    if ($basePrice > 0) $detailText .= " - Phí CĐ: {$basePriceStr}đ"; // <--- Thêm phí CĐ vào đây
+
                     $detailText .= ")</span>";
-                } elseif ($free > 0) {
-                    $detailText = "<br><span style='font-size: 11px; color: #64748b; font-weight: normal;'>(Được miễn phí: {$free} {$item->unit})</span>";
+                } else {
+                    $parts = [];
+                    if ($free > 0) $parts[] = "Được miễn phí: {$free} {$item->unit}";
+                    if ($basePrice > 0) $parts[] = "Phí CĐ: {$basePriceStr}đ";
+
+                    if (!empty($parts)) {
+                        $detailText = "<br><span style='font-size: 11px; color: #64748b; font-weight: normal;'>(" . implode(' - ', $parts) . ")</span>";
+                    }
                 }
             }
             // BỔ SUNG ĐOẠN NÀY ĐỂ CHÚ THÍCH TIỀN THẾ CHÂN
             elseif ($item->charge_type === 'deposit') {
                 $detailText = "<br><span style='font-size: 11px; color: #d97706; font-style: italic;'>* Khoản này sẽ được hoàn trả khi trả phòng nếu không phát sinh nợ/hư hỏng.</span>";
-            }
-            // GIỮ NGUYÊN PHẦN CÒN LẠI
-            elseif ($free > 0) {
-                $detailText = "<br><span style='font-size: 11px; color: #64748b; font-weight: normal;'>(Được miễn phí: {$free} {$item->unit})</span>";
             }
 
             // Gắn $detailText ngay dưới Tên dịch vụ

@@ -157,6 +157,7 @@ class InvoiceResource extends JsonResource
                     'quantity' => (float) $item->quantity,
                     'unit_price_snapshot' => (int) $item->unit_price_snapshot,
                     'free_quantity_snapshot' => (float) $item->free_quantity_snapshot,
+                    'base_price_snapshot' => (int) $item->base_price_snapshot,
                     'amount' => (int) $item->amount,
                     'sort_order' => (int) $item->sort_order,
                 ])->values();

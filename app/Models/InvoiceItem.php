@@ -26,6 +26,7 @@ class InvoiceItem extends Model
         'quantity',
         'unit_price_snapshot',
         'free_quantity_snapshot',
+        'base_price_snapshot',
         'amount',
 
         'sort_order',
@@ -38,6 +39,7 @@ class InvoiceItem extends Model
         'quantity' => 'decimal:2',
         'unit_price_snapshot' => 'integer',
         'free_quantity_snapshot' => 'decimal:2',
+        'base_price_snapshot' => 'integer',
         'amount' => 'integer',
 
         'sort_order' => 'integer',

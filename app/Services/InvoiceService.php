@@ -298,11 +298,17 @@ class InvoiceService
             $quantity = (float) ($item['quantity'] ?? 1);
             $unitPriceSnapshot = (int) ($item['unit_price_snapshot'] ?? 0);
             $freeQuantitySnapshot = (float) ($item['free_quantity_snapshot'] ?? 0);
+
+            // Lấy thêm base_price_snapshot
+            $basePriceSnapshot = (int) ($item['base_price_snapshot'] ?? 0);
+
+            // Tính khối lượng bị tính tiền
             $billableQuantity = max(0, $quantity - $freeQuantitySnapshot);
 
+            // TÍNH TIỀN: Chỉ thu phí cố định nếu khách có sử dụng (quantity > 0)
             $amount = array_key_exists('amount', $item)
                 ? (int) $item['amount']
-                : (int) round($billableQuantity * $unitPriceSnapshot);
+                : ($quantity > 0 ? (int) ($basePriceSnapshot + round($billableQuantity * $unitPriceSnapshot)) : 0);
 
             if ($chargeType === 'discount' && $amount > 0) {
                 $amount *= -1;
@@ -325,7 +331,8 @@ class InvoiceService
                 'unit' => $item['unit'] ?? null,
                 'quantity' => $quantity,
                 'unit_price_snapshot' => $unitPriceSnapshot,
-                'free_quantity_snapshot' => (float) ($item['free_quantity_snapshot'] ?? 0),
+                'free_quantity_snapshot' => $freeQuantitySnapshot,
+                'base_price_snapshot' => $basePriceSnapshot, // Lưu vào DB
                 'amount' => $amount,
                 'sort_order' => (int) ($item['sort_order'] ?? $index),
             ];
@@ -418,7 +425,6 @@ class InvoiceService
             ->keyBy('type');
 
         // TỐI ƯU N+1: Lấy trước toàn bộ chỉ số điện nước gần nhất của hợp đồng này bằng 1 câu Query
-        // unique('type') đảm bảo chỉ lấy dòng mới nhất (do đã orderByDesc)
         $lastReadings = MeterReading::where('lease_id', $leaseId)
             ->whereIn('type', ['electricity', 'water'])
             ->orderByDesc('id')
@@ -427,21 +433,37 @@ class InvoiceService
             ->keyBy('type');
 
         // Hàm helper nhỏ để xử lý Điện/Nước nội bộ trong hàm này
-        $processUtility = function (string $type) use ($lease, $applicablePrices, $unbilledReadings, $lastReadings) { // <-- Truyền thêm $lastReadings vào đây
+        $processUtility = function (string $type) use ($lease, $applicablePrices, $unbilledReadings, $lastReadings) {
             // Lấy cấu hình dịch vụ trong hợp đồng
             $serviceItem = $lease->serviceItems->firstWhere('service_type.value', $type)
                 ?? $lease->serviceItems->firstWhere('service_type', $type);
 
-            // Lấy giá và số lượng miễn phí (giống logic cũ của bạn)
+            // Lấy giá và số lượng miễn phí 
             $priceRule = $applicablePrices->firstWhere('service_type.value', $type)
                 ?? $applicablePrices->firstWhere('service_type', $type);
 
             $unitPrice = $serviceItem?->custom_price ?? ($priceRule ? $priceRule->unit_price : 0);
 
             $freeUnits = 0;
-            if ($priceRule && $priceRule->free_units > 0 && $priceRule->free_unit_type->value !== 'none') {
-                $memberCount = $priceRule->free_unit_type->value === 'per_person' ? (int) ($lease->occupants_count ?? 1) : 1;
-                $freeUnits = $priceRule->free_units * $memberCount;
+            $basePrice = 0; // Thêm biến lưu phí cơ bản
+
+            if ($priceRule) {
+                $memberCount = 1;
+                if ($priceRule->free_unit_type->value === 'per_person') {
+                    $memberCount = (int) ($lease->occupants_count ?? 1);
+                }
+
+                // Tính số lượng miễn phí (VD: 3 khối * số người)
+                if ($priceRule->free_units > 0 && $priceRule->free_unit_type->value !== 'none') {
+                    $freeUnits = $priceRule->free_units * $memberCount;
+                }
+
+                // Tính phí cơ bản (VD: 20.000đ * số người)
+                if (isset($priceRule->base_price) && $priceRule->base_price > 0) {
+                    $basePrice = $priceRule->free_unit_type->value === 'per_person'
+                        ? $priceRule->base_price * $memberCount
+                        : $priceRule->base_price;
+                }
             }
 
             // Xử lý số liệu và ảnh
@@ -452,10 +474,8 @@ class InvoiceService
                 $readingId = $reading->id;
                 $prev = $reading->previous_reading;
                 $current = $reading->current_reading;
-                // Tạo URL ảnh đầy đủ (Tùy cấu hình storage của bạn)
                 $imageUrl = $reading->meter_image ? asset('storage/' . $reading->meter_image) : null;
             } else {
-                // TỐI ƯU: Lấy từ RAM ($lastReadings) thay vì query DB
                 $lastReading = $lastReadings->get($type);
                 $prev = $lastReading ? $lastReading->current_reading : 0;
                 $current = "";
@@ -468,6 +488,7 @@ class InvoiceService
                 'current' => $current,
                 'price' => $unitPrice,
                 'free' => $freeUnits,
+                'base_price' => $basePrice,
                 'is_chot_roi' => $isChotRoi,
                 'preview' => $imageUrl, // Trả URL ảnh thẳng vào biến preview để React dùng luôn
                 'image' => null // File gốc (null vì đây là data từ server)
@@ -576,7 +597,7 @@ class InvoiceService
             ],
             'electricity' => $processUtility('electricity'),
             'water' => $processUtility('water'),
-            'dynamic_items' => $dynamicItems,
+            'dynamic_items' => $dynamicItems ?? [],
         ];
     }
 
