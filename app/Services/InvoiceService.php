@@ -533,7 +533,7 @@ class InvoiceService
                 ->exists();
 
             // 2. Nếu là hóa đơn đầu tiên (chưa từng tạo) và hợp đồng có yêu cầu tiền cọc
-            if (!$hasInvoice && $lease->deposit > 0) {
+            if (!$hasInvoice && $lease->room->deposit_amount > 0) {
 
                 // Tìm số tiền khách đã cọc (Chỉ lấy đúng phiếu cọc của hợp đồng này)
                 $reservationDeposit = \App\Models\RoomReservation::where('lease_id', $lease->id)
@@ -541,7 +541,7 @@ class InvoiceService
                     ->sum('deposit_amount');
 
                 // Tính số dư cọc cần thu
-                $remainingDeposit = (int)$lease->deposit - $reservationDeposit;
+                $remainingDeposit = (int)$lease->room->deposit_amount - $reservationDeposit;
 
                 // Nếu số tiền phải thu lớn hơn 0 thì nhét vào mảng gợi ý
                 if ($remainingDeposit > 0) {
@@ -593,7 +593,7 @@ class InvoiceService
             'tenant_name' => $lease->tenant->full_name,
 
             'room' => [
-                'price' => $lease->room_price
+                'price' => $lease->room->current_price
             ],
             'electricity' => $processUtility('electricity'),
             'water' => $processUtility('water'),
