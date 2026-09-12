@@ -75,7 +75,13 @@ class InvoiceController extends Controller
                 $query->where('lease_id', $leaseId);
             })
             ->when($request->query('status'), function ($query, $status): void {
-                $query->where('status', $status);
+                // Nếu Frontend gửi lên chuỗi có dấu phẩy (nhiều trạng thái), ta tách ra dùng whereIn
+                if (is_string($status) && str_contains($status, ',')) {
+                    $query->whereIn('status', explode(',', $status));
+                } else {
+                    // Nếu chỉ 1 trạng thái (ví dụ ở màn hình Danh sách hóa đơn) thì dùng where bình thường
+                    $query->where('status', $status);
+                }
             })
             ->when($request->query('invoice_type'), function ($query, $invoiceType): void {
                 $query->where('invoice_type', $invoiceType);
