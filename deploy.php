@@ -23,7 +23,7 @@ task('artisan:db:seed', function () {
 
 // 4. Tác vụ phụ: Khởi động lại PHP-FPM 8.2
 task('reload:php-fpm', function () {
-    run('/etc/init.d/php-fpm-82 reload');
+    run('/etc/init.d/php-fpm-84 reload');
 });
 
 // 5. Móc nối các luồng (Recipe Laravel đã tự động chạy storage:link, migrate, và optimize cache)
