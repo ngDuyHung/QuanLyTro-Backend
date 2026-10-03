@@ -7,102 +7,32 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      # 1. Checkout code
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: 🚚 Checkout Code
+      uses: actions/checkout@v4
 
-      # 2. Setup PHP
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: "8.2"
-          extensions: mbstring, xml, ctype, json, bcmath, pdo, mysql, zip, gd
+    - name: ⚙️ Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        tools: composer:v2
 
-      # 3. Install Composer Dependencies
-      - name: Install Composer Dependencies
-        run: composer install --no-dev --optimize-autoloader --no-interaction
+    - name: 📦 Install Deployer
+      run: composer global require deployer/deployer
 
-      # 4. Create deployment zip (exclude không cần thiết)
-      - name: Create deployment zip
-        run: zip -r deploy.zip . \
-          -x ".git/*" "node_modules/*" "tests/*" ".github/*" ".env" "storage/*" \
-          "phpunit.xml" "README.md" ".editorconfig"
+    - name: 🔑 Setup SSH Key
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # 5. Upload package via SCP
-      - name: Upload package to hosting (attempt 1)
-        id: upload_package
-        continue-on-error: true
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          source: "deploy.zip"
-          target: "/home/t1772298550/"
-          timeout: 300s            # thời gian chờ kết nối (giây)
-          command_timeout: 600s    # thời gian chờ lệnh chạy (giây)
+    - name: 🔓 Trust VPS Host Key
+      env:
+        VPS_IP: ${{ secrets.VPS_IP }}
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H $VPS_IP >> ~/.ssh/known_hosts
 
-      - name: Upload package to hosting (retry)
-        id: upload_package_retry
-        if: steps.upload_package.outcome == 'failure'
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          source: "deploy.zip"
-          target: "/home/t1772298550/"
-          timeout: 300s            # thời gian chờ kết nối (giây)
-          command_timeout: 600s    # thời gian chờ lệnh chạy (giây)
-
-      - name: Ensure package upload succeeded
-        if: steps.upload_package.outcome == 'failure' && steps.upload_package_retry.outcome == 'failure'
-        run: exit 1
-
-      # 6. Run post-deploy commands
-      - name: Deploy and run artisan commands
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          timeout: 300s            # thời gian chờ kết nối (giây)
-          command_timeout: 600s    # thời gian chờ lệnh chạy (giây)
-          script: |
-            cd /home/t1772298550/apiv1.duyhung.io.vn
-            unzip -o ../deploy.zip
-            rm ../deploy.zip
-
-            # Storage giữ nguyên
-            mkdir -p storage/framework/{sessions,views,cache}
-            mkdir -p storage/logs
-            chmod -R 775 storage bootstrap/cache
-
-            # Nếu chưa có .env thì copy từ example
-            [ ! -f .env ] && cp .env.example .env
-
-            # Laravel optimize
-            # lệnh migrate:fresh sẽ xóa toàn bộ dữ liệu cũ, tạo lại bảng và chạy seeder.
-            # php artisan migrate:fresh --seed --force
-
-            # 1. Dọn sạch toàn bộ cache cũ trước (Quan trọng)
-            php artisan optimize:clear
-            php artisan cache:clear
-
-            # 2. Chạy Migration và Link Storage
-            php artisan migrate --force
-            php artisan storage:link || true
-
-            # 3. Build lại toàn bộ Cache mới cho Production
-            php artisan config:cache
-            php artisan route:cache
-            php artisan view:cache
-            php artisan event:cache
-
-            # 4. Chạy Seeder
-            php artisan db:seed --class=DatabaseSeeder --force
+    - name: 🚀 Deploy to aaPanel
+      env:
+        VPS_IP: ${{ secrets.VPS_IP }}
+      run: ~/.composer/vendor/bin/dep deploy -vvv
