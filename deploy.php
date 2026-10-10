@@ -21,7 +21,7 @@ task('artisan:db:seed', function () {
     run('cd {{release_path}} && php artisan db:seed --class=DatabaseSeeder --force');
 });
 
-// 4. Tác vụ phụ: Khởi động lại PHP-FPM 8.2
+// 4. Tác vụ phụ: Khởi động lại PHP-FPM 8.4
 task('reload:php-fpm', function () {
     run('/etc/init.d/php-fpm-84 reload');
 });

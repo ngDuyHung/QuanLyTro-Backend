@@ -306,9 +306,14 @@ class InvoiceService
             $billableQuantity = max(0, $quantity - $freeQuantitySnapshot);
 
             // TÍNH TIỀN: Chỉ thu phí cố định nếu khách có sử dụng (quantity > 0)
-            $amount = array_key_exists('amount', $item)
-                ? (int) $item['amount']
-                : ($quantity > 0 ? (int) ($basePriceSnapshot + round($billableQuantity * $unitPriceSnapshot)) : 0);
+            if (array_key_exists('amount', $item)) {
+                $rawAmount = (float) $item['amount'];
+            } else {
+                $rawAmount = $quantity > 0 ? ($basePriceSnapshot + ($billableQuantity * $unitPriceSnapshot)) : 0;
+            }
+
+            // Làm tròn lên nghìn gần nhất (ví dụ: 15.500 -> 16.000)
+            $amount = (int) (ceil($rawAmount / 1000) * 1000);
 
             if ($chargeType === 'discount' && $amount > 0) {
                 $amount *= -1;
@@ -338,10 +343,11 @@ class InvoiceService
             ];
         }
 
-        $totalAmount = max(
-            0,
-            $subtotalAmount + $previousDebtAmount + $surchargeAmount - $discountAmount
-        );
+        // Tính tổng thô trước khi làm tròn
+        $rawTotal = $subtotalAmount + $previousDebtAmount + $surchargeAmount - $discountAmount;
+
+        // Làm tròn lên nghìn gần nhất (ví dụ: lẻ 15.500 -> 16.000)
+        $totalAmount = max(0, (int) (ceil($rawTotal / 1000) * 1000));
 
         return [
             'items' => $preparedItems,
